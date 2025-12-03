@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useDebounce } from '@/hooks/useDebounce'
+import DefectsStep from '@/pages/Checklists/DefectsStep'
 import { ChecklistMediaItem, ChecklistMediaItemWithUrl, uploadChecklistMedia, getChecklistMediaUrls } from '@/services/checklistMedia'
 
 type Step = 1 | 2 | 3 | 4
@@ -415,33 +416,12 @@ export default function ChecklistWizard() {
         )}
 
         {step === 2 && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {items.defects.map((d) => (
-                <label key={d.key} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={d.ok}
-                    onChange={(e) => toggleDefect(d.key, e.target.checked)}
-                  />
-                  <span>{d.label}</span>
-                </label>
-              ))}
-            </div>
-            <div>
-              <textarea
-                className="w-full min-h-24 rounded-md bg-muted border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
-                value={items.meta.defects_note ?? ''}
-                onChange={(e) => setItems((prev) => ({ ...prev, meta: { ...prev.meta, defects_note: e.target.value } }))}
-              />
-            </div>
-            <div className="flex justify-between">
-              <Button variant="ghost" onClick={() => saveItemsAndGo(1)}>Voltar</Button>
-              <div className="flex gap-2">
-                <Button onClick={() => saveItemsAndGo(3)}>Avançar</Button>
-              </div>
-            </div>
-          </div>
+          <DefectsStep
+            checklistId={checklistId ?? ''}
+            initialItems={items.defects}
+            onPrev={() => setStep(1)}
+            onNext={() => setStep(3)}
+          />
         )}
 
         {step === 3 && (
