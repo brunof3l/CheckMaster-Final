@@ -31,7 +31,7 @@ export default function UsersAdmin() {
           <Badge variant={u.role === 'admin' ? 'success' : u.role === 'user' ? 'default' : 'destructive'}>{u.role === 'disabled' ? 'desativado' : u.role}</Badge>
         ),
       },
-      { key: 'created_at', header: 'Criado em' },
+      { key: 'created_at', header: 'Criado em', render: (u) => new Date(u.created_at).toLocaleString('pt-BR') },
       {
         key: 'actions',
         header: 'Ações',

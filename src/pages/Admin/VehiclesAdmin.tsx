@@ -144,7 +144,7 @@ export default function VehiclesAdmin() {
       header: 'Ativo',
       render: (v) => <Badge variant={v.active ? 'success' : 'destructive'}>{v.active ? 'sim' : 'inativo'}</Badge>,
     },
-    { key: 'created_at', header: 'Criado em' },
+    { key: 'created_at', header: 'Criado em', render: (v) => new Date(v.created_at).toLocaleString('pt-BR') },
     {
       key: 'actions',
       header: 'Ações',

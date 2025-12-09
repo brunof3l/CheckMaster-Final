@@ -25,8 +25,10 @@ export default function ChecklistDetail() {
   const [budget, setBudget] = useState<{ path: string; name?: string; size?: number; type?: string; created_at: string; url: string | null }[]>([])
   const [fuelEntryUrl, setFuelEntryUrl] = useState<string | null>(null)
   const [fuelExitUrl, setFuelExitUrl] = useState<string | null>(null)
+  const [viewImage, setViewImage] = useState<string | null>(null)
 
   const { data, isLoading, update, finalize } = useChecklistDetail(id!)
+  const meta = (data?.items as any)?.meta || {}
 
   useEffect(() => {
     setNotes(data?.notes ?? '')
@@ -103,16 +105,40 @@ export default function ChecklistDetail() {
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="p-4">
-              <h2 className="font-semibold mb-3">Dados</h2>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+          <Card className="p-4">
+            <h2 className="font-semibold mb-3">Dados</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Placa</span>
-                  <div>{data?.vehicles?.plate ?? '-'}</div>
+                  <span className="text-muted-foreground">Nº Checklist</span>
+                  <div>{data?.seq ?? '-'}</div>
+                </div>
+                <div>
+                   <span className="text-muted-foreground">Placa</span>
+                   <div>{data?.vehicles?.plate ?? '-'}</div>
+                 </div>
+                <div>
+                  <span className="text-muted-foreground">Modelo/Marca</span>
+                  <div>{[data?.vehicles?.model, data?.vehicles?.brand].filter(Boolean).join(' / ') || '-'}</div>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Fornecedor</span>
                   <div>{data?.suppliers?.trade_name ?? data?.suppliers?.corporate_name ?? '-'}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-sm">Serviço</span>
+                  <div>{meta.service || '-'}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-sm">KM</span>
+                  <div>{meta.km || '-'}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-sm">Responsável</span>
+                  <div>{meta.responsavel || '-'}</div>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Data de criação</span>
+                  <div>{data?.created_at ? new Date(data.created_at).toLocaleString('pt-BR') : '-'}</div>
                 </div>
               </div>
             </Card>
@@ -123,7 +149,11 @@ export default function ChecklistDetail() {
               <div>
                 <div className="text-sm text-muted-foreground mb-1">Entrada</div>
                 {fuelEntryUrl ? (
-                  <img src={fuelEntryUrl} className="w-full h-32 object-cover rounded-md" />
+                  <img
+                    src={fuelEntryUrl}
+                    className="w-full h-32 object-cover rounded-md cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => setViewImage(fuelEntryUrl!)}
+                  />
                 ) : (
                   <div className="text-xs text-muted-foreground">Sem foto</div>
                 )}
@@ -131,7 +161,11 @@ export default function ChecklistDetail() {
               <div>
                 <div className="text-sm text-muted-foreground mb-1">Saída</div>
                 {fuelExitUrl ? (
-                  <img src={fuelExitUrl} className="w-full h-32 object-cover rounded-md" />
+                  <img
+                    src={fuelExitUrl}
+                    className="w-full h-32 object-cover rounded-md cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => setViewImage(fuelExitUrl!)}
+                  />
                 ) : (
                   <div className="text-xs text-muted-foreground">Sem foto</div>
                 )}
@@ -177,20 +211,29 @@ export default function ChecklistDetail() {
       </Card>
 
           <Card className="p-4">
-            <h2 className="font-semibold mb-3">Itens com defeito</h2>
-            {Array.isArray((data?.items as any)?.defects) ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-                {((data?.items as any).defects as { key: string; label: string; ok: boolean }[]).map((d) => (
-                  <div key={d.key} className={"px-2 py-1 rounded-md border " + (d.ok ? "border-green-700/60 bg-green-500/10 text-green-300" : "border-red-700/60 bg-red-500/10 text-red-300")}>{d.label}</div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">Sem dados</p>
-            )}
-            {((data?.items as any)?.meta?.defects_note ?? '') ? (
-              <div className="mt-2 text-xs text-muted-foreground">{(data?.items as any).meta.defects_note}</div>
-            ) : null}
-          </Card>
+             <h2 className="font-semibold mb-3">Itens com defeito</h2>
+             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+               {((data?.items as any)?.defects ?? [])
+                 .filter((d: any) => d.checked)
+                 .map((d: any) => (
+                   <div
+                     key={d.key}
+                     className="px-3 py-2 rounded-md border border-red-700/60 bg-red-500/10 text-red-300 font-medium"
+                   >
+                     {d.label}
+                   </div>
+                 ))}
+               {((data?.items as any)?.defects ?? []).filter((d: any) => d.checked).length === 0 && (
+                 <p className="text-muted-foreground text-sm col-span-full">Nenhum defeito apontado.</p>
+               )}
+             </div>
+             {((data?.items as any)?.meta?.defects_note) && (
+               <div className="mt-3 p-3 rounded-md bg-muted/30 border border-border">
+                 <span className="text-xs text-muted-foreground uppercase font-bold block mb-1">Outros / Observações</span>
+                 <div className="text-sm">{(data?.items as any).meta.defects_note}</div>
+               </div>
+             )}
+           </Card>
 
           <Card className="p-4">
             <h2 className="font-semibold mb-3">Orçamento</h2>
@@ -206,16 +249,6 @@ export default function ChecklistDetail() {
                 ))}
               </div>
             )}
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div>
-                <span className="text-muted-foreground text-sm">Total</span>
-                <div className="text-sm">{(data?.items as any)?.meta?.budget_total ?? '-'}</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-sm">Notas</span>
-                <div className="text-sm">{(data?.items as any)?.meta?.budget_notes ?? '-'}</div>
-              </div>
-            </div>
           </Card>
 
           <Card className="p-4">
@@ -239,6 +272,9 @@ export default function ChecklistDetail() {
           </SimpleModal>
           <SimpleModal open={!!selected} onClose={() => setSelected(null)} title="Prévia da imagem">
             {selected && <img src={selected.url ?? ''} className="w-full h-auto rounded-md" />}
+          </SimpleModal>
+          <SimpleModal open={!!viewImage} onClose={() => setViewImage(null)} title="Visualização">
+            {viewImage && <img src={viewImage} className="w-full h-auto rounded-md" />}
           </SimpleModal>
           <div className="flex gap-2">
             <Button onClick={() => finalize.mutate(undefined, { onError: (e: any) => toast.error(e.message) })}>

@@ -9,6 +9,11 @@ import { useChecklistsList } from '@/hooks/useChecklists'
 import type { Checklist } from '@/types'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getDashboardStats } from '@/services/checklists'
+import { useQuery } from '@tanstack/react-query'
+import { exportChecklistPDF } from '@/services/pdfExport'
+import { FileText } from 'lucide-react'
+import { toast } from 'sonner'
 
 type ChecklistRow = Checklist
 
@@ -27,14 +32,30 @@ const columns: Column<ChecklistRow>[] = [
       </Badge>
     ),
   },
-  { key: 'created_at', header: 'Criado em' },
+  { key: 'created_at', header: 'Criado em', render: (r) => new Date(r.created_at).toLocaleString('pt-BR') },
   {
     key: 'actions',
     header: 'Ações',
     render: (r) => (
-      <Link to={`/checklists/${r.id}`} className="text-primary hover:underline">
-        Abrir
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link to={`/checklists/${r.id}`} className="text-primary hover:underline">
+          Abrir
+        </Link>
+        <button
+          className="text-primary hover:underline inline-flex items-center gap-1"
+          onClick={async () => {
+            const t = toast.loading('Gerando PDF...')
+            try {
+              await exportChecklistPDF(r.id)
+              toast.success('PDF gerado', { id: t })
+            } catch (e: any) {
+              toast.error(e?.message ?? 'Falha ao gerar PDF', { id: t })
+            }
+          }}
+        >
+          <FileText size={16} /> Exportar
+        </button>
+      </div>
     ),
   },
 ]
@@ -45,6 +66,8 @@ export default function Checklists() {
   const [status, setStatus] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+
+  const { data: stats } = useQuery({ queryKey: ['dashboard-stats'], queryFn: getDashboardStats })
 
   const { data, isLoading } = useChecklistsList({
     search: placa || fornecedor,
@@ -63,6 +86,16 @@ export default function Checklists() {
           </Link>
         }
       />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="p-4">
+          <div className="text-sm text-muted-foreground">Em andamento</div>
+          <div className="text-3xl font-bold text-primary">{stats?.open ?? 0}</div>
+        </Card>
+        <Card className={"p-4 " + ((stats?.late ?? 0) > 0 ? "border border-red-500/50 bg-red-500/10" : "") }>
+          <div className="text-sm text-red-600">Atenção (+48h)</div>
+          <div className="text-3xl font-bold text-red-600">{stats?.late ?? 0}</div>
+        </Card>
+      </div>
       <Card className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <Input placeholder="Buscar por placa" value={placa} onChange={(e) => setPlaca(e.target.value)} />

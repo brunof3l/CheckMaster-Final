@@ -11,13 +11,13 @@ const baseItems = [
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ onClose, className }: { onClose?: () => void; className?: string }) {
   const profile = useAuthStore((s) => s.profile)
   const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
   const items = profile?.role === 'admin' ? [...baseItems, { to: '/admin', label: 'Admin', icon: Shield }] : baseItems
   return (
-    <aside className="w-64 bg-muted border-r border-border p-4 hidden md:block">
+    <aside className={cn("w-64 bg-muted border-r border-border p-4 flex flex-col h-full", className)}>
       <div className="flex items-center gap-2 px-2 py-3">
         <CheckSquare className="text-primary" size={22} />
         <span className="font-semibold">CheckMaster</span>
@@ -33,6 +33,7 @@ export default function Sidebar() {
                 isActive && 'bg-border/50'
               )
             }
+            onClick={onClose}
           >
             <Icon size={18} />
             <span>{label}</span>

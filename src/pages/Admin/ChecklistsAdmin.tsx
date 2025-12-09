@@ -53,7 +53,7 @@ export default function ChecklistsAdmin() {
         </Badge>
       ),
     },
-    { key: 'created_at', header: 'Criado em' },
+    { key: 'created_at', header: 'Criado em', render: (r) => new Date(r.created_at).toLocaleString('pt-BR') },
     {
       key: 'actions',
       header: 'Ações',

@@ -32,8 +32,8 @@ export default function Login() {
   return (
     <div className="w-full flex items-center justify-center py-24">
       <Card className="w-full max-w-sm p-6">
-        <div className="mb-6 text-center">
-          <h1 className="text-xl font-semibold">Entrar</h1>
+        <div className="mb-2 text-center">
+          <h1 className="text-xl font-semibold">CheckMaster</h1>
           <p className="text-muted-foreground text-sm">Acesse sua conta</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
