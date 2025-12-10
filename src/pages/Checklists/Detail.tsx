@@ -191,7 +191,7 @@ export default function ChecklistDetail() {
 
       <Card className="p-4">
         <h2 className="font-semibold mb-3">Fotos</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
           <input
             type="file"
             accept="image/*"
@@ -297,7 +297,13 @@ export default function ChecklistDetail() {
                 Voltar
               </Button>
             ) : (
-              <Button onClick={() => finalize.mutate(undefined, { onError: (e: any) => toast.error(e.message) })}>
+              <Button onClick={() => finalize.mutate(undefined, {
+                onSuccess: () => {
+                  toast.success('Checklist finalizado com sucesso!')
+                  navigate('/checklists')
+                },
+                onError: (e: any) => toast.error(e.message || 'Erro ao finalizar')
+              })}>
                 Finalizar checklist
               </Button>
             )}
