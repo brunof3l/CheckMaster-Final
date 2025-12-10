@@ -69,62 +69,28 @@ export async function exportChecklistPDF(checklistId: string): Promise<void> {
     startY: y,
     theme: 'striped',
     styles: { fontSize: 9 },
+    headStyles: { fillColor: [28, 100, 242], textColor: 255 },
     head: [['Defeito', 'Observações']],
     body: defects.map((d) => [d.label ?? '-', d.notes ?? '']),
   })
   y = (doc as any).lastAutoTable.finalY + 8
 
-  const notes = (checklist as any)?.notes ?? ''
-  if (String(notes).trim().length > 0) {
-    doc.setFontSize(12)
-    doc.text('Observações', margin, y)
-    y += 6
-    doc.setFontSize(10)
-    const lines = doc.splitTextToSize(String(notes), doc.internal.pageSize.getWidth() - margin * 2)
-    doc.text(lines, margin, y)
-    y += (Array.isArray(lines) ? lines.length : 1) * 5 + 6
-  }
+  // Observações: substituir para Serviço e Observação do serviço
+  const serviceValue = ((checklist as any)?.items?.meta?.service ?? '').toString().trim()
+  const serviceObs = ((checklist as any)?.notes ?? '').toString().trim()
+  autoTable(doc, {
+    startY: y,
+    theme: 'striped',
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [28, 100, 242], textColor: 255 },
+    head: [['Serviço', 'Observação']],
+    body: [[serviceValue || '—', serviceObs || '—']],
+  })
+  y = (doc as any).lastAutoTable.finalY + 8
 
-  // Seção de Orçamento: exibir imagem dos anexos de orçamento e remover Total/Notas
-  doc.setFontSize(12)
-  doc.text('Orçamento', margin, y)
-  y += 6
-  const budgetAtts = (((checklist as any)?.budgetAttachments ?? []) as { path: string; type?: string }[])
-  const budgetImages = budgetAtts
-    .filter((a) => (a.type ?? '').startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(a.path))
-    .map((a) => a.path)
+  // Removido: seção de Orçamento e imagens de orçamento
 
-  if (budgetImages.length === 0) {
-    doc.setFontSize(10)
-    doc.text('Sem anexos', margin, y)
-    y += 6
-  } else {
-    const pageW = doc.internal.pageSize.getWidth()
-    const pageH = doc.internal.pageSize.getHeight()
-    const gap = 6
-    const cols = 2
-    const imgW = (pageW - margin * 2 - gap) / cols
-    const imgH = 60
-    let col = 0
-    for (const p of budgetImages) {
-      const img = await pathToDataUrl(p)
-      if (!img) continue
-      const x = margin + col * (imgW + gap)
-      if (y + imgH > pageH - margin) {
-        doc.addPage()
-        y = margin
-      }
-      doc.addImage(img.dataUrl, img.format, x, y, imgW, imgH)
-      col++
-      if (col >= cols) {
-        col = 0
-        y += imgH + gap
-      }
-    }
-    y += 2
-  }
-
-  // Outras imagens e anexos (exceto orçamento) em "Anexos"
+  // Outras imagens e anexos (exceto orçamento) com cabeçalho padronizado "Anexos"
   const imagePaths: string[] = []
   const media = (((checklist as any)?.media ?? []) as { path: string }[])
   for (const m of media) imagePaths.push(m.path)
@@ -133,9 +99,16 @@ export async function exportChecklistPDF(checklistId: string): Promise<void> {
   if (fuel?.exit?.path) imagePaths.push(fuel.exit.path)
 
   if (imagePaths.length > 0) {
-    doc.setFontSize(12)
-    doc.text('Anexos', margin, y)
-    y += 6
+    autoTable(doc, {
+      startY: y,
+      theme: 'striped',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [28, 100, 242], textColor: 255 },
+      head: [['Anexos']],
+      body: [['Fotos listadas abaixo']],
+    })
+    y = (doc as any).lastAutoTable.finalY + 8
+
     const pageW = doc.internal.pageSize.getWidth()
     const pageH = doc.internal.pageSize.getHeight()
     const gap = 6
