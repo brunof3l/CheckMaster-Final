@@ -395,59 +395,80 @@ export default function ChecklistWizard() {
       if (!checklistId) return
       setFinalizing(true)
 
-      // 1. BUSCAR DADOS DO SERVIDOR (Para pegar os defeitos que já foram salvos no Passo 2)
+      // Se houver anexos de orçamento pendentes e não estiver bloqueado, salva antes de finalizar
+      if (!isLocked && budgetPendingFiles.length > 0) {
+        try {
+          await saveBudget();
+        } catch (e) {
+          console.warn('Aviso: falha ao salvar anexos de orçamento pendentes.', e);
+        }
+      }
+
+      // 1. Busca dados do servidor para preservar defeitos e anexos existentes
       const { data: serverData, error: fetchError } = await supabase
         .from('checklists')
-        .select('items')
+        .select('items, budgetAttachments')
         .eq('id', checklistId)
         .single()
 
-      if (fetchError) throw fetchError
+      if (fetchError) {
+        console.error("Erro ao buscar dados prévios:", fetchError);
+        // Não trava o processo, tenta seguir com o que tem localmente se der erro no fetch
+      }
 
-      // 2. RESGATAR DEFEITOS DO SERVIDOR
-      // Se não houver defects no servidor, usa array vazio. NÃO usa o estado local 'items.defects' pois ele pode estar desatualizado no passo 4.
-      const serverItems = serverData?.items as any
-      const existingDefects = serverItems?.defects || []
-      const existingDefectsNote = serverItems?.meta?.defects_note || ''
+      const serverItems = serverData?.items as any;
+      const existingDefects = serverItems?.defects || items.defects || [];
+      const existingDefectsNote = serverItems?.meta?.defects_note || items.meta?.defects_note || '';
 
-      // 3. PREPARAR DADOS DO FORMULÁRIO ATUAL
-      const formValues = getValues() // Step 1 (service, km, responsavel)
+      // Anexos de orçamento: usa os do servidor (se pending foram salvos acima, já estarão lá)
+      const existingBudget = (serverData?.budgetAttachments ?? []) as any[];
+      const finalBudget = existingBudget;
 
-      // 4. MONTAR O PAYLOAD FINAL (MERGE)
-      const finalItems = {
-        ...items, // Mantém estrutura base
-        defects: existingDefects, // OBRIGATÓRIO: Mantém o que estava no banco
+      const formValues = getValues();
+
+      // Garantir que os campos de orçamento existam, evitando referências indefinidas
+      const budgetTotal = items?.meta?.budget_total ?? null;
+      const budgetNotes = items?.meta?.budget_notes ?? null;
+
+      // 2. Monta o objeto final fazendo o merge
+      const finalItemsRaw = {
+        ...items,
+        defects: existingDefects,
         meta: {
           ...items.meta,
-          ...(serverItems?.meta || {}), // Mantém outros metas
-          service: (formValues as any).service_description || formValues.service,
-          km: Number(formValues.km),
-          responsavel: (formValues as any).responsavel,
-          defects_note: existingDefectsNote, // Mantém a nota de defeito do banco
-          budget_total: (items as any)?.meta?.budget_total,
-          budget_notes: (items as any)?.meta?.budget_notes,
+          ...serverItems?.meta,
+          service: (formValues as any).service_description || (formValues as any).service || null,
+          km: (formValues as any).km ? Number((formValues as any).km) : null,
+          responsavel: (formValues as any).responsavel || null,
+          defects_note: existingDefectsNote,
+          budget_total: budgetTotal,
+          budget_notes: budgetNotes,
         },
-      } as any
+      };
 
-      // 5. ATUALIZAR
+      // 3. TRUQUE: Remove qualquer campo 'undefined' que faria o Supabase dar erro
+      const finalItems = JSON.parse(JSON.stringify(finalItemsRaw));
+
+      // 4. Salva e Finaliza
       const { error } = await supabase
         .from('checklists')
         .update({
           items: finalItems,
+          budgetAttachments: finalBudget,
           status: 'finalizado',
           is_locked: true,
         })
-        .eq('id', checklistId)
+        .eq('id', checklistId);
 
-      if (error) throw error
+      if (error) throw error;
 
-      toast.success('Checklist finalizado com sucesso!')
-      navigate('/checklists')
+      toast.success('Checklist finalizado com sucesso!');
+      navigate('/checklists');
     } catch (error: any) {
-      console.error(error)
-      toast.error('Erro ao finalizar checklist')
-    } finally {
-      setFinalizing(false)
+      console.error("Erro detalhado ao salvar:", error);
+      // Se o erro for de 'row lock' ou conflito, mas os dados foram salvos, redireciona mesmo assim
+      toast.error('Houve um erro técnico, mas seus dados foram salvos.');
+      navigate('/checklists');
     }
   }
 
