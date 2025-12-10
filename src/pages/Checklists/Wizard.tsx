@@ -88,6 +88,8 @@ const schema = z.object({
 export default function ChecklistWizard() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const user = useAuthStore((s) => s.user)
+  const profile = useAuthStore((s) => s.profile)
   const [step, setStep] = useState<Step>(1)
   const [checklistId, setChecklistId] = useState<string | null>(null)
   const [seq, setSeq] = useState<number | null>(null)
