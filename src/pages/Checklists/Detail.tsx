@@ -122,41 +122,54 @@ export default function ChecklistDetail() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="p-4">
             <h2 className="font-semibold mb-3">Dados</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Nº Checklist</span>
-                  <div>{data?.seq ?? '-'}</div>
-                </div>
-                <div>
-                   <span className="text-muted-foreground">Placa</span>
-                   <div>{data?.vehicles?.plate ?? '-'}</div>
-                 </div>
-                <div>
-                  <span className="text-muted-foreground">Modelo/Marca</span>
-                  <div>{[data?.vehicles?.model, data?.vehicles?.brand].filter(Boolean).join(' / ') || '-'}</div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Fornecedor</span>
-                  <div>{data?.suppliers?.trade_name ?? data?.suppliers?.corporate_name ?? '-'}</div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-sm">Serviço</span>
-                  <div>{meta.service || data?.service || '-'}</div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-sm">KM</span>
-                  <div>{meta.km || data?.km || '-'}</div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-sm">Responsável</span>
-                  <div>{meta.responsavel || data?.users?.name || '-'}</div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Data de criação</span>
-                  <div>{data?.created_at ? new Date(data.created_at).toLocaleString('pt-BR') : '-'}</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <span className="text-muted-foreground text-sm block">Nº Checklist</span>
+                <div className="text-lg font-medium">{data?.seq || data?.id}</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm block">Placa</span>
+                <div className="text-lg font-medium">{data?.vehicles?.plate || '-'}</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm block">Modelo/Marca</span>
+                <div className="text-lg font-medium">
+                  {data?.vehicles?.model} {data?.vehicles?.brand ? `/ ${data.vehicles.brand}` : ''}
                 </div>
               </div>
-            </Card>
+              <div>
+                <span className="text-muted-foreground text-sm block">Fornecedor</span>
+                <div className="text-lg font-medium">
+                  {data?.suppliers?.trade_name || data?.suppliers?.name || '-'}
+                </div>
+              </div>
+            
+              <div>
+                <span className="text-muted-foreground text-sm block">Serviço</span>
+                <div className="text-lg font-medium">
+                  {(data?.items as any)?.meta?.service || '-'}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm block">KM</span>
+                <div className="text-lg font-medium">
+                  {(data?.items as any)?.meta?.km || '-'}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm block">Responsável</span>
+                <div className="text-lg font-medium">
+                  {(data?.items as any)?.meta?.responsavel || data?.users?.name || '-'}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm block">Data de criação</span>
+                <div className="text-lg font-medium">
+                  {data?.created_at ? new Date(data.created_at).toLocaleString('pt-BR') : '-'}
+                </div>
+              </div>
+            </div>
+          </Card>
 
           <Card className="p-4">
             <h2 className="font-semibold mb-3">Combustível</h2>

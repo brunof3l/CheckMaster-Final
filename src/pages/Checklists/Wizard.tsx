@@ -17,6 +17,7 @@ import { ChecklistMediaItem, ChecklistMediaItemWithUrl, uploadChecklistMedia, ge
 import { Paperclip, CheckCircle } from 'lucide-react'
 import SupplierForm from '@/components/forms/SupplierForm'
 import { createSupplierRow } from '@/services/suppliers'
+import { useAuthStore } from '@/store/auth'
 
 
 type Step = 1 | 2 | 3 | 4
@@ -393,63 +394,50 @@ export default function ChecklistWizard() {
   async function saveAndExit() {
     try {
       if (!checklistId) return
-      setFinalizing(true)
 
-      // Se houver anexos de orçamento pendentes e não estiver bloqueado, salva antes de finalizar
-      if (!isLocked && budgetPendingFiles.length > 0) {
-        try {
-          await saveBudget();
-        } catch (e) {
-          console.warn('Aviso: falha ao salvar anexos de orçamento pendentes.', e);
-        }
-      }
+      // 1. Captura os valores do formulário AGORA (Passo 1)
+      const formValues = getValues()
 
-      // 1. Busca dados do servidor para preservar defeitos e anexos existentes
-      const { data: serverData, error: fetchError } = await supabase
+      // 2. Busca o que já está salvo no banco (para não perder os defeitos do Passo 2)
+      const { data: serverData } = await supabase
         .from('checklists')
         .select('items, budgetAttachments')
         .eq('id', checklistId)
         .single()
 
-      if (fetchError) {
-        console.error("Erro ao buscar dados prévios:", fetchError);
-        // Não trava o processo, tenta seguir com o que tem localmente se der erro no fetch
+      const serverItems = serverData?.items as any
+
+      // 3. Define os anexos do orçamento (usa o novo se tiver, senão mantém o antigo)
+      const finalBudget = (serverData?.budgetAttachments ?? []) as any[]
+
+      // 4. Monta o objeto 'meta' com segurança
+      // Prioridade: O que está no form > O que está no estado > O que veio do banco > null
+      const budgetTotal = (items?.meta as any)?.budget_total ?? null
+      const budgetNotes = (items?.meta as any)?.budget_notes ?? null
+      const metaData = {
+        ...items.meta,
+        ...serverItems?.meta,
+        service: (formValues as any).service_description || (formValues as any).service || serverItems?.meta?.service || null,
+        km: (formValues as any).km ? Number((formValues as any).km) : (serverItems?.meta?.km || null),
+        responsavel: (formValues as any).responsavel || profile?.name || user?.email || null,
+        defects_note: serverItems?.meta?.defects_note || items.meta?.defects_note || null,
+        budget_total: budgetTotal || null,
+        budget_notes: budgetNotes || null,
       }
 
-      const serverItems = serverData?.items as any;
-      const existingDefects = serverItems?.defects || items.defects || [];
-      const existingDefectsNote = serverItems?.meta?.defects_note || items.meta?.defects_note || '';
-
-      // Anexos de orçamento: usa os do servidor (se pending foram salvos acima, já estarão lá)
-      const existingBudget = (serverData?.budgetAttachments ?? []) as any[];
-      const finalBudget = existingBudget;
-
-      const formValues = getValues();
-
-      // Garantir que os campos de orçamento existam, evitando referências indefinidas
-      const budgetTotal = items?.meta?.budget_total ?? null;
-      const budgetNotes = items?.meta?.budget_notes ?? null;
-
-      // 2. Monta o objeto final fazendo o merge
+      // 5. Monta o objeto final
       const finalItemsRaw = {
-        ...items,
-        defects: existingDefects,
-        meta: {
-          ...items.meta,
-          ...serverItems?.meta,
-          service: (formValues as any).service_description || (formValues as any).service || null,
-          km: (formValues as any).km ? Number((formValues as any).km) : null,
-          responsavel: (formValues as any).responsavel || null,
-          defects_note: existingDefectsNote || null,
-          budget_total: budgetTotal || null,
-          budget_notes: budgetNotes || null,
-        },
-      };
+        ...items, // Estado atual
+        defects: serverItems?.defects || items.defects || [], // Mantém defeitos do banco
+        meta: metaData, // Salva os metadados tratados acima
+      }
 
-      // 3. TRUQUE: Remove qualquer campo 'undefined' que faria o Supabase dar erro
-      const finalItems = JSON.parse(JSON.stringify(finalItemsRaw));
+      // 6. LIMPEZA PROFUNDA (Remove 'undefined' que causa erro no Supabase)
+      const finalItems = JSON.parse(JSON.stringify(finalItemsRaw))
 
-      // 4. Salva e Finaliza
+      console.log('Salvando checklist com dados:', finalItems) // Log para debug
+
+      // 7. Envia para o banco
       const { error } = await supabase
         .from('checklists')
         .update({
@@ -458,17 +446,15 @@ export default function ChecklistWizard() {
           status: 'finalizado',
           is_locked: true,
         })
-        .eq('id', checklistId);
+        .eq('id', checklistId)
 
-      if (error) throw error;
+      if (error) throw error
 
-      toast.success('Checklist finalizado com sucesso!');
-      navigate('/checklists');
+      toast.success('Checklist salvo com sucesso!')
+      navigate('/checklists')
     } catch (error: any) {
-      console.error("Erro detalhado ao salvar:", error);
-      // Se o erro for de 'row lock' ou conflito, mas os dados foram salvos, redireciona mesmo assim
-      toast.error('Houve um erro técnico, mas seus dados foram salvos.');
-      navigate('/checklists');
+      console.error('Erro crítico ao salvar:', error)
+      toast.error('Erro ao salvar: ' + (error.message || 'Dados inválidos'))
     }
   }
 
