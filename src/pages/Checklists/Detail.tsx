@@ -124,47 +124,47 @@ export default function ChecklistDetail() {
             <h2 className="font-semibold mb-3">Dados</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <span className="text-muted-foreground text-sm block">Nº Checklist</span>
-                <div className="text-lg font-medium">{data?.seq || data?.id}</div>
+                <span className="text-muted-foreground text-xs block">Nº Checklist</span>
+                <div className="text-sm font-medium">{data?.seq || data?.id}</div>
               </div>
               <div>
-                <span className="text-muted-foreground text-sm block">Placa</span>
-                <div className="text-lg font-medium">{data?.vehicles?.plate || '-'}</div>
+                <span className="text-muted-foreground text-xs block">Placa</span>
+                <div className="text-sm font-medium">{data?.vehicles?.plate || '-'}</div>
               </div>
               <div>
-                <span className="text-muted-foreground text-sm block">Modelo/Marca</span>
-                <div className="text-lg font-medium">
+                <span className="text-muted-foreground text-xs block">Modelo/Marca</span>
+                <div className="text-sm font-medium">
                   {data?.vehicles?.model} {data?.vehicles?.brand ? `/ ${data.vehicles.brand}` : ''}
                 </div>
               </div>
               <div>
-                <span className="text-muted-foreground text-sm block">Fornecedor</span>
-                <div className="text-lg font-medium">
+                <span className="text-muted-foreground text-xs block">Fornecedor</span>
+                <div className="text-sm font-medium">
                   {data?.suppliers?.trade_name || data?.suppliers?.name || '-'}
                 </div>
               </div>
             
               <div>
-                <span className="text-muted-foreground text-sm block">Serviço</span>
-                <div className="text-lg font-medium">
+                <span className="text-muted-foreground text-xs block">Serviço</span>
+                <div className="text-sm font-medium">
                   {(data?.items as any)?.meta?.service || '-'}
                 </div>
               </div>
               <div>
-                <span className="text-muted-foreground text-sm block">KM</span>
-                <div className="text-lg font-medium">
+                <span className="text-muted-foreground text-xs block">KM</span>
+                <div className="text-sm font-medium">
                   {(data?.items as any)?.meta?.km || '-'}
                 </div>
               </div>
               <div>
-                <span className="text-muted-foreground text-sm block">Responsável</span>
-                <div className="text-lg font-medium">
+                <span className="text-muted-foreground text-xs block">Responsável</span>
+                <div className="text-sm font-medium">
                   {(data?.items as any)?.meta?.responsavel || data?.users?.name || '-'}
                 </div>
               </div>
               <div>
-                <span className="text-muted-foreground text-sm block">Data de criação</span>
-                <div className="text-lg font-medium">
+                <span className="text-muted-foreground text-xs block">Data de criação</span>
+                <div className="text-sm font-medium">
                   {data?.created_at ? new Date(data.created_at).toLocaleString('pt-BR') : '-'}
                 </div>
               </div>
