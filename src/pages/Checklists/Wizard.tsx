@@ -586,7 +586,7 @@ export default function ChecklistWizard() {
                 )}
               </div>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 mb-16 md:mb-0">
               <Button type="submit">Avançar</Button>
             </div>
           </form>
@@ -640,7 +640,7 @@ export default function ChecklistWizard() {
                 />
               ))}
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between mb-16 md:mb-0">
               <Button variant="ghost" onClick={() => setStep(2)}>Voltar</Button>
               <Button onClick={advanceFromPhotos}>Avançar</Button>
             </div>
@@ -766,7 +766,7 @@ export default function ChecklistWizard() {
               </div>
             </div>
 
-            <div className="flex justify-between">
+            <div className="flex justify-between mb-16 md:mb-0">
               <Button variant="ghost" onClick={() => setStep(3)}>Voltar</Button>
               <Button onClick={saveAndExit} loading={finalizing} disabled={finalizing || isLocked}>Salvar e Sair</Button>
             </div>
