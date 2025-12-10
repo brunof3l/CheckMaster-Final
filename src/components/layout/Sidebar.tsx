@@ -18,8 +18,8 @@ export default function Sidebar({ onClose, className }: { onClose?: () => void; 
   const items = profile?.role === 'admin' ? [...baseItems, { to: '/admin', label: 'Admin', icon: Shield }] : baseItems
   return (
     <aside className={cn("w-64 bg-muted border-r border-border p-4 flex flex-col h-full", className)}>
-      <div className="flex items-center h-16 px-4">
-        <img src="/logo-horizontal.png" alt="CheckMaster" className="h-10 w-auto object-contain" />
+      <div className="flex items-center h-24 px-0">
+        <img src="/logo-horizontal.png" alt="CheckMaster" className="h-full w-full object-contain" />
       </div>
       <nav className="mt-4 space-y-1">
         {items.map(({ to, label, icon: Icon }) => (
