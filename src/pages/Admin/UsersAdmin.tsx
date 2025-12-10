@@ -112,9 +112,7 @@ export default function UsersAdmin() {
         <div className="mt-4 overflow-x-auto">
           <DataTable columns={columns} data={(data ?? []) as any} />
         </div>
-+        <div className="mt-4 overflow-x-auto">
-+          <DataTable columns={columns} data={(data ?? []) as any} />
-+        </div>
+
       </Card>
     </div>
   )
