@@ -408,7 +408,18 @@ export default function ChecklistWizard() {
       const serverItems = serverData?.items as any
 
       // 3. Define os anexos do orçamento (usa o novo se tiver, senão mantém o antigo)
-      const finalBudget = (serverData?.budgetAttachments ?? []) as any[]
+      // 3. Orçamento: mantém anexos existentes e adiciona pendentes (se houver)
+      const nextBudget: any[] = Array.isArray(serverData?.budgetAttachments) ? [...serverData!.budgetAttachments] : []
+      if (budgetPendingFiles.length > 0) {
+        for (const f of budgetPendingFiles) {
+          const ext = f.name.toLowerCase().match(/\.(pdf|jpg|jpeg|png|webp)$/)?.[1] ?? 'pdf'
+          const path = `${checklistId}/budget/${crypto.randomUUID()}.${ext}`
+          const { error: upErr } = await supabase.storage.from('checklists').upload(path, f, { upsert: false })
+          if (upErr) throw new Error(upErr.message)
+          nextBudget.push({ path, name: f.name, size: f.size, type: f.type || `application/${ext}`, created_at: new Date().toISOString() })
+        }
+      }
+      const finalBudget = nextBudget
 
       // 4. Monta o objeto 'meta' com segurança
       // Prioridade: O que está no form > O que está no estado > O que veio do banco > null
@@ -443,12 +454,12 @@ export default function ChecklistWizard() {
         .update({
           items: finalItems,
           budgetAttachments: finalBudget,
-          status: 'finalizado',
-          is_locked: true,
         })
         .eq('id', checklistId)
 
       if (error) throw error
+
+      setBudgetPendingFiles([])
 
       toast.success('Checklist salvo com sucesso!')
       navigate('/checklists')
