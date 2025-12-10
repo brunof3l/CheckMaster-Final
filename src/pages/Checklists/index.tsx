@@ -128,8 +128,24 @@ export default function Checklists() {
               <option value="finalizado">Finalizado</option>
               <option value="cancelado">Cancelado</option>
             </select>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Input
+              type="text"
+              placeholder="Data Inicial"
+              className="w-full"
+              onFocus={(e) => (e.target.type = 'date')}
+              onBlur={(e) => { if (!e.target.value) e.target.type = 'text' }}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+            <Input
+              type="text"
+              placeholder="Data Final"
+              className="w-full"
+              onFocus={(e) => (e.target.type = 'date')}
+              onBlur={(e) => { if (!e.target.value) e.target.type = 'text' }}
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
           </div>
         </Card>
       </div>
