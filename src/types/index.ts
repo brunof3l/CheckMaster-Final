@@ -1,4 +1,4 @@
-export type ChecklistStatus = 'em_andamento' | 'finalizado' | 'cancelado'
+export type ChecklistStatus = 'em_andamento' | 'finalizado' | 'cancelado' | 'rascunho'
 
 export type User = {
   id: string

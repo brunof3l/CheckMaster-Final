@@ -31,30 +31,29 @@ const columns: Column<ChecklistRow>[] = [
   {
     key: 'status',
     header: 'Status',
-    render: (r) => (
-      <div className="flex items-center gap-2">
-        <Badge
-          variant={r.status === 'finalizado' ? 'success' : r.status === 'cancelado' ? 'destructive' : 'warning'}
-        >
-          {r.status.replace('_', ' ')}
-        </Badge>
-        {r.status !== 'finalizado' && (
-          (() => {
+    render: (r) => {
+      const label = r.status
+      const variant = label === 'finalizado' ? 'success' : label === 'cancelado' ? 'destructive' : label === 'rascunho' ? 'draft' : 'warning'
+      return (
+        <div className="flex items-center gap-2">
+          <Badge variant={variant}>{label.replace('_', ' ')}</Badge>
+          {label !== 'finalizado' && (() => {
             const d = getDaysOpen(r.created_at)
             const text = d <= 0 ? 'Hoje' : d >= 2 ? `${d} dias atrasado` : `${d} dia${d > 1 ? 's' : ''}`
-            const variant = d >= 2 ? 'destructive' : 'default'
-            return <Badge variant={variant}>{text}</Badge>
-          })()
-        )}
-      </div>
-    ),
+            const variantDelayed = d >= 2 ? 'destructive' : 'default'
+            return <Badge variant={variantDelayed}>{text}</Badge>
+          })()}
+        </div>
+      )
+    },
   },
   { key: 'created_at', header: 'Criado em', render: (r) => new Date(r.created_at).toLocaleString('pt-BR') },
   {
     key: 'dias_em_aberto',
     header: 'Dias em Aberto',
     render: (r) => {
-      if (r.status === 'finalizado') {
+      const label = r.status
+      if (label === 'finalizado') {
         return <span className="text-muted-foreground">-</span>
       }
       const d = getDaysOpen(r.created_at)
@@ -71,7 +70,7 @@ const columns: Column<ChecklistRow>[] = [
     header: 'Ações',
     render: (r) => (
       <div className="flex items-center gap-3">
-        <Link to={`/checklists/${r.id}`} className="text-primary hover:underline">
+        <Link to={r.status === 'rascunho' ? `/checklists/${r.id}/edit` : `/checklists/${r.id}`} className="text-primary hover:underline">
           Abrir
         </Link>
         <button
@@ -110,7 +109,9 @@ export default function Checklists() {
     const s = location.state as any
     if (s?.finalized) {
       toast.success('Checklist finalizado')
-      navigate(location.pathname, { replace: true, state: null })
+      if (typeof navigate === 'function') {
+        navigate(location.pathname, { replace: true, state: null })
+      }
     }
   }, [location, navigate])
 
@@ -138,6 +139,7 @@ export default function Checklists() {
       return activeTab === 'open' ? !isFinished : isFinished
     })
   }, [filteredChecklists, activeTab])
+
 
   return (
     <div className="space-y-4">
@@ -187,6 +189,7 @@ export default function Checklists() {
             >
               <option value="">Todos</option>
               <option value="em_andamento">Em andamento</option>
+              <option value="rascunho">Rascunho</option>
               <option value="finalizado">Finalizado</option>
               <option value="cancelado">Cancelado</option>
             </select>
@@ -248,9 +251,11 @@ export default function Checklists() {
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">Nº {r.seq}</div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={r.status === 'finalizado' ? 'success' : r.status === 'cancelado' ? 'destructive' : 'warning'}>
-                      {r.status.replace('_', ' ')}
-                    </Badge>
+                    {(() => {
+                      const label = r.status
+                      const variant = label === 'finalizado' ? 'success' : label === 'cancelado' ? 'destructive' : label === 'rascunho' ? 'draft' : 'warning'
+                      return <Badge variant={variant}>{label.replace('_', ' ')}</Badge>
+                    })()}
                     {r.status !== 'finalizado' && (() => {
                       const d = getDaysOpen(r.created_at)
                       const text = d <= 0 ? 'Hoje' : d >= 2 ? `${d} dias atrasado` : `${d} dia${d > 1 ? 's' : ''}`
@@ -267,7 +272,7 @@ export default function Checklists() {
                   <div className="text-muted-foreground">{r.suppliers?.trade_name ?? r.suppliers?.corporate_name ?? '-'}</div>
                 </div>
                 <div className="mt-3 flex items-center gap-3">
-                  <Link to={`/checklists/${r.id}`} className="text-primary hover:underline">Abrir</Link>
+                  <Link to={r.status === 'rascunho' ? `/checklists/${r.id}/edit` : `/checklists/${r.id}`} className="text-primary hover:underline">Abrir</Link>
                   <button
                     className="text-primary hover:underline inline-flex items-center gap-1"
                     onClick={async () => {

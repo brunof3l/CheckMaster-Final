@@ -16,7 +16,9 @@ export async function listChecklists({
     .from('checklists')
     .select('*, vehicles:vehicle_id(*), suppliers:supplier_id(*), users:created_by(*)')
     .order('created_at', { ascending: false })
-  if (status) q = q.eq('status', status)
+  if (status) {
+    q = q.eq('status', status as any)
+  }
   if (from) q = q.gte('created_at', from)
   if (to) q = q.lte('created_at', to)
   if (search) q = q.or(`vehicles.plate.ilike.%${search}%,suppliers.name.ilike.%${search}%`)

@@ -330,15 +330,20 @@ export default function ChecklistDetail() {
                 Voltar
               </Button>
             ) : (
-              <Button onClick={() => finalize.mutate(undefined, {
-                onSuccess: () => {
-                  toast.success('Checklist finalizado com sucesso!')
-                  navigate('/checklists')
-                },
-                onError: (e: any) => toast.error(e.message || 'Erro ao finalizar')
-              })}>
-                Finalizar checklist
-              </Button>
+              <>
+                <Button onClick={() => finalize.mutate(undefined, {
+                  onSuccess: () => {
+                    toast.success('Checklist finalizado com sucesso!')
+                    navigate('/checklists')
+                  },
+                  onError: (e: any) => toast.error(e.message || 'Erro ao finalizar')
+                })}>
+                  Finalizar checklist
+                </Button>
+                <Button variant="outline" onClick={() => navigate(`/checklists/${id}/edit`)}>
+                  Continuar Preenchimento
+                </Button>
+              </>
             )}
           </div>
         </>

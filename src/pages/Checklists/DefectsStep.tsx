@@ -13,8 +13,8 @@ export default function DefectsStep({ checklistId, initialItems = [], initialNot
     const normalized: Item[] = (initialItems ?? []).map((it: any, idx: number) => ({
       id: it.id ?? it.key ?? `i-${idx}`,
       label: it.label ?? it.name ?? String(it),
-      checked: !!it.checked,
-      problem: !!it.problem,
+      checked: typeof it.checked === 'boolean' ? !!it.checked : (typeof it.ok === 'boolean' ? !it.ok : false),
+      problem: typeof it.problem === 'boolean' ? !!it.problem : (typeof it.ok === 'boolean' ? !it.ok : false),
       notes: it.notes ?? '',
     }))
     setItems(normalized)
@@ -56,6 +56,13 @@ export default function DefectsStep({ checklistId, initialItems = [], initialNot
       setSaving(false)
     }
   }
+
+  // Auto-salvar ao sair desta tela (desmontar), preservando dados preenchidos
+  useEffect(() => {
+    return () => {
+      void save()
+    }
+  }, [items, generalNotes])
 
   async function next() {
     const ok = await save()

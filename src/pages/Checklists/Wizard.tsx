@@ -14,7 +14,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useDebounce } from '@/hooks/useDebounce'
 import DefectsStep from '@/pages/Checklists/DefectsStep'
 import { ChecklistMediaItem, ChecklistMediaItemWithUrl, uploadChecklistMedia, getChecklistMediaUrls } from '@/services/checklistMedia'
-import { Paperclip, CheckCircle } from 'lucide-react'
+import { Paperclip, CheckCircle, DollarSign, X, Save, CheckCircle2, Upload, Camera, Trash2 } from 'lucide-react'
 import SupplierForm from '@/components/forms/SupplierForm'
 import { createSupplierRow } from '@/services/suppliers'
 import { useAuthStore } from '@/store/auth'
@@ -111,12 +111,34 @@ export default function ChecklistWizard() {
   const [budgetPendingFiles, setBudgetPendingFiles] = useState<File[]>([])
   const [savingBudget, setSavingBudget] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  // Estado local para arquivos de orçamento exibidos na UI do Passo 4
+  const [budget, setBudget] = useState<File[]>([])
+
+  // Valores do orçamento vindos de items.meta (safe)
+  const budgetTotal = (items?.meta as any)?.budget_total ?? null
+  const budgetNotes = (items?.meta as any)?.budget_notes ?? ''
+
+  // Helpers para atualizar items.meta sem duplicar estado
+  const setBudgetTotal = (val: number | null) =>
+    setItems((prev) => ({ ...prev, meta: { ...prev.meta, budget_total: val ?? null } }))
+  const setBudgetNotes = (val: string) =>
+    setItems((prev) => ({ ...prev, meta: { ...prev.meta, budget_notes: val || null } }))
 
   const photosInputRef = useRef<HTMLInputElement>(null)
   const budgetInputRef = useRef<HTMLInputElement>(null)
   const fuelEntryInputRef = useRef<HTMLInputElement>(null)
   const fuelExitInputRef = useRef<HTMLInputElement>(null)
 
+  // Mantém sempre a versão mais atual dos itens para o salvamento de emergência
+  const itemsRef = useRef(items)
+  const budgetRef = useRef(budget)
+  useEffect(() => { itemsRef.current = items }, [items])
+  useEffect(() => { budgetRef.current = budget }, [budget])
+
+  const isSavingRef = useRef(false)
+  const isFinalizingRef = useRef(false)
   const [fuelEntry, setFuelEntry] = useState<{ path: string; created_at: string } | null>(null)
   const [fuelExit, setFuelExit] = useState<{ path: string; created_at: string } | null>(null)
   const [fuelEntryUrl, setFuelEntryUrl] = useState<string | null>(null)
@@ -165,47 +187,113 @@ export default function ChecklistWizard() {
     if (supplierQuery) fetchSuppliers(supplierQuery)
   }, [supplierQuery])
 
+  // Carregar dados se for edição ou rascunho
   useEffect(() => {
-    ;(async () => {
-      if (id) {
+    const loadChecklist = async () => {
+      // Pega o ID da URL ou da prop
+      const targetId = id || new URLSearchParams(window.location.search).get('id')
+      if (!targetId) return
+
+      setLoading(true)
+      try {
         const { data, error } = await supabase
           .from('checklists')
-          .select('id, seq, status, is_locked, vehicle_id, supplier_id, notes, items, media, budgetAttachments, fuelGaugePhotos')
-          .eq('id', id)
+          .select('*')
+          .eq('id', targetId)
           .single()
-        if (error) return
-        setChecklistId(data.id)
-        setSeq(data.seq ?? null)
-        setIsLocked(!!data.is_locked || data.status === 'finalizado')
-        const meta = (data.items?.meta ?? {}) as ItemsPayload['meta']
-        const defects = (data.items?.defects ?? defectCatalog) as DefectItem[]
-        setItems({ meta, defects })
-        const existingMedia = (data.media ?? []) as ChecklistMediaItem[]
-        const urls = await getChecklistMediaUrls(existingMedia)
-        setMedia(urls)
-        setFuelEntry((data.fuelGaugePhotos?.entry ?? null) as any)
-        setFuelExit((data.fuelGaugePhotos?.exit ?? null) as any)
-        const entry = (data.fuelGaugePhotos?.entry ?? null) as { path: string } | null
-        const exit = (data.fuelGaugePhotos?.exit ?? null) as { path: string } | null
-        if (entry) {
-          const { data: u, error } = await supabase.storage.from('checklists').createSignedUrl(entry.path, 3600)
-          setFuelEntryUrl(error ? null : u.signedUrl)
-        } else setFuelEntryUrl(null)
-        if (exit) {
-          const { data: u, error } = await supabase.storage.from('checklists').createSignedUrl(exit.path, 3600)
-          setFuelExitUrl(error ? null : u.signedUrl)
-        } else setFuelExitUrl(null)
-        reset({
-          service: meta.service ?? '',
-          notes: data.notes ?? '',
-          km: meta.km ?? 0,
-          responsavel: meta.responsavel ?? '',
-          vehicle_id: data.vehicle_id ?? '',
-          supplier_id: data.supplier_id ?? '',
-        })
+
+        if (error) throw error
+
+        if (data) {
+          // 1. Restaura o ID e Status
+          setChecklistId(data.id)
+
+          // 2. Restaura Itens (Defeitos e meta)
+          const loadedItems = data.items || { defects: [], meta: {} }
+          setItems(loadedItems)
+          itemsRef.current = loadedItems
+
+          // 3. Restaura Campos do Formulário (Passo 1)
+          setValue('km', loadedItems.meta?.km || '')
+          setValue('service', loadedItems.meta?.service || '')
+          setValue('responsavel', loadedItems.meta?.responsavel || '')
+          if (loadedItems.meta?.plate) setValue('plate', loadedItems.meta.plate)
+          if (data.vehicle_id) {
+            setValue('vehicle_id', data.vehicle_id)
+            // Preenche label visível da busca de veículo
+            try {
+              const { data: v } = await supabase
+                .from('vehicles')
+                .select('id, plate, brand, model, year, vehicle_type')
+                .eq('id', data.vehicle_id)
+                .single()
+              if (v) setVehicleQuery(`${v.plate} - ${[v.brand, v.model, v.year, v.vehicle_type].filter(Boolean).join(' / ')}`)
+            } catch (_) {}
+          }
+          if (data.supplier_id) {
+            setValue('supplier_id', data.supplier_id)
+            // Preenche label visível da busca de fornecedor
+            try {
+              const { data: s } = await supabase
+                .from('suppliers')
+                .select('id, name, trade_name, corporate_name')
+                .eq('id', data.supplier_id)
+                .single()
+              if (s) setSupplierQuery(s.trade_name ?? s.corporate_name ?? s.name ?? '')
+            } catch (_) {}
+          }
+          setValue('notes', data.notes ?? '')
+
+          // 4. Restaura Orçamento (topo)
+          if (Array.isArray(data.budgetAttachments)) {
+            setBudget(data.budgetAttachments as any)
+            budgetRef.current = data.budgetAttachments as any
+          }
+
+          // 5. Restaura Fotos (Passo 3)
+          if (Array.isArray(data.media)) {
+            try {
+              const withUrls = await getChecklistMediaUrls(data.media as any)
+              setMedia(withUrls)
+            } catch (e) {
+              console.error('Erro ao carregar fotos do checklist:', e)
+            }
+          }
+
+          // 6. Restaura fotos de combustível (entrada/saída)
+          if (data.fuelGaugePhotos) {
+            try {
+              if (data.fuelGaugePhotos.entry?.path) {
+                setFuelEntry(data.fuelGaugePhotos.entry)
+                const { data: u } = await supabase.storage.from('checklists').createSignedUrl(data.fuelGaugePhotos.entry.path, 3600)
+                setFuelEntryUrl(u?.signedUrl ?? null)
+              } else {
+                setFuelEntry(null)
+                setFuelEntryUrl(null)
+              }
+              if (data.fuelGaugePhotos.exit?.path) {
+                setFuelExit(data.fuelGaugePhotos.exit)
+                const { data: u2 } = await supabase.storage.from('checklists').createSignedUrl(data.fuelGaugePhotos.exit.path, 3600)
+                setFuelExitUrl(u2?.signedUrl ?? null)
+              } else {
+                setFuelExit(null)
+                setFuelExitUrl(null)
+              }
+            } catch (e) {
+              console.error('Erro ao carregar fotos de combustível:', e)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao carregar checklist:', error)
+        toast.error('Erro ao carregar dados do rascunho.')
+      } finally {
+        setLoading(false)
       }
-    })()
-  }, [id])
+    }
+
+    loadChecklist()
+  }, [id, setValue])
 
   async function onNextStep1(values: z.infer<typeof schema>) {
     if (isLocked) {
@@ -219,7 +307,7 @@ export default function ChecklistWizard() {
       return
     }
     const payloadItems: ItemsPayload = {
-      meta: { service: values.service, km: values.km, responsavel: values.responsavel, defects_note: items.meta.defects_note },
+      meta: { service: values.service, km: values.km, responsavel: values.responsavel, plate: values.plate, defects_note: items.meta.defects_note },
       defects: items.defects,
     }
     if (!checklistId) {
@@ -308,186 +396,220 @@ export default function ChecklistWizard() {
     setBudgetPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  async function saveBudget() {
-    if (!checklistId) return
-    try {
-      setSavingBudget(true)
-      const { data: existing } = await supabase
-        .from('checklists')
-        .select('budgetAttachments')
-        .eq('id', checklistId)
-        .single()
-      const current = (existing?.budgetAttachments ?? []) as { path: string; name?: string; size?: number; type?: string; created_at: string }[]
-      const next = [...current]
-      if (budgetPendingFiles.length > 0) {
-        for (const f of budgetPendingFiles) {
-          const extMatch = f.name.toLowerCase().match(/\.(pdf|jpg|jpeg|png|webp|heic|heif)$/)?.[1] ?? 'pdf'
-          const isImage = /jpg|jpeg|png|webp|heic|heif/.test(extMatch)
-          let fileToUpload: File = f
-          if (isImage) {
-            const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true }
-            try { fileToUpload = (await imageCompression(f, options)) as File } catch {}
-          }
-          const finalExt = isImage
-            ? (fileToUpload.type === 'image/png' ? 'png' : fileToUpload.type === 'image/webp' ? 'webp' : 'jpg')
-            : extMatch
-          const path = `${checklistId}/budget/${crypto.randomUUID()}.${finalExt}`
-          const { error: upErr } = await supabase.storage.from('checklists').upload(path, fileToUpload, { upsert: false })
-          if (upErr) throw new Error(upErr.message)
-          next.push({ path, name: f.name, size: fileToUpload.size, type: isImage ? (fileToUpload.type || 'image/jpeg') : `application/${extMatch}`, created_at: new Date().toISOString() })
-        }
-      }
-
-      // Atualiza somente anexos de orçamento para não sobrescrever itens/defeitos
-      const { error } = await supabase
-        .from('checklists')
-        .update({ budgetAttachments: next })
-        .eq('id', checklistId)
-      if (error) throw new Error(error.message)
-
-      setBudgetPendingFiles([])
-      toast.success('Orçamento salvo')
-    } catch (e: any) {
-      toast.error(e.message ?? 'Erro ao salvar orçamento')
-    } finally {
-      setSavingBudget(false)
-    }
-  }
-
-  async function uploadFuel(kind: 'entry' | 'exit', file: File) {
-    if (!checklistId) return
-    const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true }
-    let fileToUpload: File = file
-    try { fileToUpload = (await imageCompression(file, options)) as File } catch {}
-    const finalExt = fileToUpload.type === 'image/png' ? 'png' : fileToUpload.type === 'image/webp' ? 'webp' : 'jpg'
-    const path = `${checklistId}/fuel/${kind}-${crypto.randomUUID()}.${finalExt}`
-    const { error } = await supabase.storage.from('checklists').upload(path, fileToUpload, { upsert: false })
-    if (error) throw new Error(error.message)
-    const created = { path, created_at: new Date().toISOString() }
-    const next = {
-      entry: kind === 'entry' ? created : fuelEntry,
-      exit: kind === 'exit' ? created : fuelExit,
-    }
-    const { error: updErr } = await supabase.from('checklists').update({ fuelGaugePhotos: next }).eq('id', checklistId)
-    if (updErr) throw new Error(updErr.message)
-    setFuelEntry(next.entry as any)
-    setFuelExit(next.exit as any)
-    const { data: u, error: urlErr } = await supabase.storage.from('checklists').createSignedUrl(path, 3600)
-    if (!urlErr) {
-      if (kind === 'entry') setFuelEntryUrl(u.signedUrl)
-      else setFuelExitUrl(u.signedUrl)
-    }
-    toast.success('Foto de combustível enviada')
-  }
-
-  async function removeFuel(kind: 'entry' | 'exit') {
-    if (!checklistId) return
-    if (isLocked) {
-      toast.error('Checklist bloqueado')
-      return
-    }
-    const next = {
-      entry: kind === 'entry' ? null : fuelEntry,
-      exit: kind === 'exit' ? null : fuelExit,
-    }
-    const { error } = await supabase.from('checklists').update({ fuelGaugePhotos: next }).eq('id', checklistId)
-    if (error) return toast.error('Erro ao remover')
-    if (kind === 'entry') {
-      setFuelEntry(null)
-      setFuelEntryUrl(null)
-      if (fuelEntryInputRef.current) fuelEntryInputRef.current.value = ''
-    } else {
-      setFuelExit(null)
-      setFuelExitUrl(null)
-      if (fuelExitInputRef.current) fuelExitInputRef.current.value = ''
-    }
-    toast.success('Foto removida')
-  }
-
-  async function saveAndExit() {
+  async function onPickFuel(kind: 'entry' | 'exit', e: React.ChangeEvent<HTMLInputElement>) {
     try {
       if (!checklistId) return
+      const file = e.target.files?.[0]
+      if (!file) return
+      let uploadFile: File = file
+      const isImage = file.type.startsWith('image/')
+      if (isImage) {
+        const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true }
+        try { uploadFile = (await imageCompression(file, options)) as File } catch {}
+      }
+      const ext = isImage
+        ? (uploadFile.type === 'image/png' ? 'png' : uploadFile.type === 'image/webp' ? 'webp' : 'jpg')
+        : (file.name.split('.').pop()?.toLowerCase() || 'bin')
+      const path = `${checklistId}/fuel/${kind}-${crypto.randomUUID()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('checklists').upload(path, uploadFile, { upsert: false })
+      if (upErr) throw new Error(upErr.message)
+  
+      const next = {
+        entry: kind === 'entry' ? { path, created_at: new Date().toISOString() } : fuelEntry,
+        exit: kind === 'exit' ? { path, created_at: new Date().toISOString() } : fuelExit,
+      }
+      const { error } = await supabase.from('checklists').update({ fuelGaugePhotos: next }).eq('id', checklistId)
+      if (error) throw error
+  
+      if (kind === 'entry') {
+        setFuelEntry(next.entry as any)
+        const { data: u } = await supabase.storage.from('checklists').createSignedUrl(path, 3600)
+        if (u) setFuelEntryUrl(u.signedUrl)
+      } else {
+        setFuelExit(next.exit as any)
+        const { data: u } = await supabase.storage.from('checklists').createSignedUrl(path, 3600)
+        if (u) setFuelExitUrl(u.signedUrl)
+      }
+      toast.success('Foto de combustível anexada')
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'Erro ao anexar combustível')
+    }
+  }
 
-      // 1. Captura os valores do formulário AGORA (Passo 1)
+  async function saveDraft(silent: boolean = false) {
+    try {
+      if (!checklistId) return
+      if (isSavingRef) isSavingRef.current = true
+      setLoading(true)
+
+      const currentItems = itemsRef.current || items
+      const currentBudget = budgetRef.current || budget
       const formValues = getValues()
 
-      // 2. Busca o que já está salvo no banco (para não perder os defeitos do Passo 2)
-      const { data: serverData } = await supabase
+      // Buscar itens mais recentes para não sobrescrever defeitos salvos no Passo 2
+      const { data: existing } = await supabase
         .from('checklists')
-        .select('items, budgetAttachments')
+        .select('items')
         .eq('id', checklistId)
         .single()
 
-      const serverItems = serverData?.items as any
+      // Constrói metadados dos arquivos selecionados (sem binários)
+      const budgetMeta = (Array.isArray(currentBudget) ? currentBudget : []).map((f: any) => ({
+        name: f?.name,
+        size: f?.size,
+        type: f?.type,
+      }))
 
-      // 3. Define os anexos do orçamento (usa o novo se tiver, senão mantém o antigo)
-      // 3. Orçamento: mantém anexos existentes e adiciona pendentes (se houver)
-      const nextBudget: any[] = Array.isArray(serverData?.budgetAttachments) ? [...serverData!.budgetAttachments] : []
-      if (budgetPendingFiles.length > 0) {
-        for (const f of budgetPendingFiles) {
-          const extMatch = f.name.toLowerCase().match(/\.(pdf|jpg|jpeg|png|webp|heic|heif)$/)?.[1] ?? 'pdf'
-          const isImage = /jpg|jpeg|png|webp|heic|heif/.test(extMatch)
-          let fileToUpload: File = f
-          if (isImage) {
-            const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true }
-            try { fileToUpload = (await imageCompression(f, options)) as File } catch {}
-          }
-          const finalExt = isImage
-            ? (fileToUpload.type === 'image/png' ? 'png' : fileToUpload.type === 'image/webp' ? 'webp' : 'jpg')
-            : extMatch
-          const path = `${checklistId}/budget/${crypto.randomUUID()}.${finalExt}`
-          const { error: upErr } = await supabase.storage.from('checklists').upload(path, fileToUpload, { upsert: false })
-          if (upErr) throw new Error(upErr.message)
-          nextBudget.push({ path, name: f.name, size: fileToUpload.size, type: isImage ? (fileToUpload.type || 'image/jpeg') : `application/${extMatch}`, created_at: new Date().toISOString() })
-        }
-      }
-      const finalBudget = nextBudget
-
-      // 4. Monta o objeto 'meta' com segurança
-      // Prioridade: O que está no form > O que está no estado > O que veio do banco > null
-      const budgetTotal = (items?.meta as any)?.budget_total ?? null
-      const budgetNotes = (items?.meta as any)?.budget_notes ?? null
-      const metaData = {
-        ...items.meta,
-        ...serverItems?.meta,
-        service: (formValues as any).service_description || (formValues as any).service || serverItems?.meta?.service || null,
-        km: (formValues as any).km ? Number((formValues as any).km) : (serverItems?.meta?.km || null),
-        responsavel: (formValues as any).responsavel || profile?.name || user?.email || null,
-        defects_note: serverItems?.meta?.defects_note || items.meta?.defects_note || null,
-        budget_total: budgetTotal || null,
-        budget_notes: budgetNotes || null,
+      // Mescla itens preservando defeitos existentes e atualiza metadados do Passo 1
+      const existingItems: any = (existing?.items ?? {})
+      const mergedItems = {
+        ...existingItems,
+        ...currentItems,
+        defects: Array.isArray(existingItems?.defects) ? existingItems.defects : currentItems?.defects,
+        meta: {
+          ...(existingItems?.meta ?? {}),
+          ...(currentItems?.meta ?? {}),
+          km: formValues.km ? Number(formValues.km) : (existingItems?.meta?.km ?? currentItems?.meta?.km),
+          service: formValues.service || (existingItems?.meta?.service ?? currentItems?.meta?.service),
+          responsavel: formValues.responsavel || (existingItems?.meta?.responsavel ?? currentItems?.meta?.responsavel),
+          plate: formValues.plate || (existingItems?.meta?.plate ?? currentItems?.meta?.plate),
+          defects_note: (existingItems?.meta?.defects_note ?? currentItems?.meta?.defects_note) || null,
+        },
       }
 
-      // 5. Monta o objeto final
-      const finalItemsRaw = {
-        ...items, // Estado atual
-        defects: serverItems?.defects || items.defects || [], // Mantém defeitos do banco
-        meta: metaData, // Salva os metadados tratados acima
-      }
-
-      // 6. LIMPEZA PROFUNDA (Remove 'undefined' que causa erro no Supabase)
-      const finalItems = JSON.parse(JSON.stringify(finalItemsRaw))
-
-      console.log('Salvando checklist com dados:', finalItems) // Log para debug
-
-      // 7. Envia para o banco
+      // Salva como RASCUNHO, guardando anexos no campo de topo e metadados do checklist
       const { error } = await supabase
         .from('checklists')
         .update({
-          items: finalItems,
-          budgetAttachments: finalBudget,
+          items: mergedItems,
+          budgetAttachments: budgetMeta,
+          vehicle_id: formValues.vehicle_id || null,
+          supplier_id: formValues.supplier_id || null,
+          notes: formValues.notes ?? (null as any),
+          status: 'rascunho',
+          is_locked: false,
         })
         .eq('id', checklistId)
 
       if (error) throw error
 
-      setBudgetPendingFiles([])
+      toast.success('Rascunho salvo com sucesso!')
+      if (!silent) navigate('/checklists')
+    } catch (error: any) {
+      console.error('Erro rascunho:', error)
+      toast.error('Erro ao salvar: ' + (error.message || 'Erro desconhecido'))
+    } finally {
+      setLoading(false)
+      setTimeout(() => { if (isSavingRef) isSavingRef.current = false }, 1000)
+    }
+  }
 
-      toast.success('Checklist salvo com sucesso!')
+  async function saveDraftAndExit() {
+    try {
+      isSavingRef.current = true
+      await saveDraft(true)
+      navigate('/checklists')
+    } finally {
+      isSavingRef.current = false
+    }
+  }
+
+  // Auto-save: tenta salvar rascunho quando usuário sai da rota ou fecha a aba
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isSavingRef.current) return
+      // Se tiver id, tenta salvar rascunho ao sair
+      if (checklistId && !isFinalizingRef.current) {
+        // Evita prompt, mas alguns navegadores exigem uma string
+        e.preventDefault()
+        e.returnValue = ""
+        saveDraft(true)
+      }
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [checklistId])
+
+  // Auto-save ao desmontar (sair da tela)
+  useEffect(() => {
+    return () => {
+      if (checklistId && !isFinalizingRef.current) {
+        void saveDraft(true)
+      }
+    }
+  }, [checklistId])
+
+  async function saveAndExit() {
+    // Bloqueia auto-save imediatamente
+    if (isFinalizingRef) isFinalizingRef.current = true
+
+    try {
+      if (!checklistId) return
+      setLoading(true)
+
+      const currentItems = itemsRef.current || items
+      const currentBudget = budgetRef.current || budget
+      const formValues = getValues()
+
+      // Buscar o estado mais recente salvo (preserva defeitos gravados no passo 2)
+      const { data: existing } = await supabase
+        .from('checklists')
+        .select('items')
+        .eq('id', checklistId)
+        .single()
+
+      // Extrai apenas metadados locais e prepara upload para storage
+      const filesArray: any[] = Array.isArray(currentBudget) ? currentBudget : []
+      const uploadedBudget = [] as { path: string; name?: string; size?: number; type?: string; created_at: string }[]
+      for (const f of filesArray) {
+        if (f && typeof f === 'object' && 'name' in f && f instanceof File) {
+          const path = `budget/${checklistId}/${Date.now()}-${f.name}`
+          const { error: upErr } = await supabase.storage.from('checklists').upload(path, f, { upsert: false })
+          if (!upErr) uploadedBudget.push({ path, name: f.name, size: f.size, type: f.type, created_at: new Date().toISOString() })
+        } else if (f?.path) {
+          uploadedBudget.push({ path: f.path, name: f.name, size: f.size, type: f.type, created_at: f.created_at || new Date().toISOString() })
+        }
+      }
+
+      // Mescla itens preservando defeitos existentes e atualiza metadados
+      const existingItems: any = (existing?.items ?? {})
+      const mergedItems = {
+        ...existingItems,
+        ...currentItems,
+        defects: Array.isArray(existingItems?.defects) ? existingItems.defects : currentItems?.defects,
+        meta: {
+          ...(existingItems?.meta ?? {}),
+          ...(currentItems?.meta ?? {}),
+          km: formValues.km ? Number(formValues.km) : (existingItems?.meta?.km ?? currentItems?.meta?.km),
+          service: formValues.service || (existingItems?.meta?.service ?? currentItems?.meta?.service),
+          responsavel: formValues.responsavel || (existingItems?.meta?.responsavel ?? currentItems?.meta?.responsavel),
+        },
+      }
+
+      const { error } = await supabase
+        .from('checklists')
+        .update({
+          items: mergedItems,
+          budgetAttachments: uploadedBudget,
+          status: 'em_andamento',
+          is_locked: false,
+        })
+        .eq('id', checklistId)
+
+      if (error) throw error
+
+      toast.success('Checklist salvo e colocado em andamento!')
       navigate('/checklists')
     } catch (error: any) {
-      console.error('Erro crítico ao salvar:', error)
-      toast.error('Erro ao salvar: ' + (error.message || 'Dados inválidos'))
+      console.error('Erro ao finalizar:', error)
+      toast.error('Erro ao salvar checklist.')
+      if (isFinalizingRef) isFinalizingRef.current = false
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -699,129 +821,188 @@ export default function ChecklistWizard() {
         )}
 
         {step === 4 && (
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="text-sm font-medium">Orçamento</div>
-              <div className="rounded-md border border-dashed border-border bg-muted/30 p-6 text-center">
-                <input
-                  ref={budgetInputRef}
-                  type="file"
-                  multiple
-                  accept="application/pdf,image/*"
-                  onChange={onPickBudgetFiles}
-                  disabled={isLocked}
-                  className="hidden"
-                />
-                <Button variant="ghost" onClick={() => budgetInputRef.current?.click()} disabled={isLocked}>Selecionar arquivos</Button>
-                <div className="mt-2 text-xs text-muted-foreground">Arquivos suportados: PDF e imagens • Tamanho adequado</div>
+          <div className="animate-in fade-in slide-in-from-right-8 duration-500 pb-20">
+            <div className="mb-6"><h2 className="text-2xl font-bold">Finalização</h2></div>
+            
+            <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+              <div className="bg-muted/30 border-b p-4 flex items-center gap-3">
+                <DollarSign className="w-5 h-5 text-blue-500" />
+                <h3 className="font-semibold">Orçamento e Anexos</h3>
               </div>
-              {budgetPendingFiles.length > 0 && (
-                <div className="space-y-2">
-              {budgetPendingFiles.map((f, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm">
-                  <Paperclip size={16} className="text-muted-foreground" />
-                  <span className="truncate">{f.name}</span>
-                  <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB</span>
-                  <button type="button" className="ml-auto text-xs text-red-500" onClick={() => removePendingBudget(idx)}>Remover</button>
-                </div>
-              ))}
-                </div>
-              )}
-              <div>
-                <Button onClick={saveBudget} loading={savingBudget} disabled={savingBudget || isLocked}>Salvar orçamento</Button>
-              </div>
-            </div>
 
-            <div className="space-y-3 border rounded-md p-4 bg-muted/20">
-              <div className="font-semibold text-sm">Registro de Combustível</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="text-xs uppercase text-muted-foreground font-bold">Entrada</div>
-                  {fuelEntryUrl ? (
-                    <div className="relative group w-full h-40">
-                      <img
-                        src={fuelEntryUrl}
-                        className="w-full h-full object-cover rounded-md border border-border cursor-pointer hover:opacity-90"
-                        onClick={() => setPreviewUrl(fuelEntryUrl!)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeFuel('entry')}
-                        className="absolute top-2 right-2 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                        disabled={isLocked}
-                      >
-                        ✕
-                      </button>
+              <div className="p-6 space-y-6">
+                {/* Área de Upload */}
+                <div className="border-2 border-dashed border-muted-foreground/20 bg-muted/5 rounded-xl p-6 text-center">
+                  <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  
+                  {/* Contador Dinâmico */}
+                  <p className="text-sm font-medium mb-4">
+                    {(budget && budget.length > 0)
+                      ? <span className="text-green-500 font-bold">{budget.length} arquivo(s) pronto(s) para salvar</span>
+                      : "Nenhum arquivo selecionado"
+                    }
+                  </p>
+                  
+                  <input 
+                    id="budget-upload" 
+                    type="file" 
+                    accept=".pdf,image/*" 
+                    multiple 
+                    className="hidden" 
+                    onChange={(e) => { 
+                      if (e.target.files && e.target.files.length > 0) { 
+                        const newFiles = Array.from(e.target.files); 
+                        setBudget((prev) => [...(prev || []), ...newFiles]);
+                        setBudgetPendingFiles((prev) => [...prev, ...newFiles]);
+                        e.target.value = ''; 
+                      } 
+                    }} 
+                  />
+                  <label 
+                    htmlFor="budget-upload" 
+                    className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-6 py-2 transition-colors mb-4" 
+                  > 
+                    Escolher Arquivos 
+                  </label>
+
+                  {/* LISTA DE ARQUIVOS */}
+                  {(budget || []).length > 0 && (
+                    <div className="grid gap-3 mt-6 text-left">
+                      <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Arquivos na lista ({budget.length})</p>
+                      
+                      {budget.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-card border border-border rounded-xl shadow-sm hover:border-primary/30 transition-all">
+                          
+                          {/* Ícone e Nome */}
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold border ${
+                              file.type?.includes('pdf')
+                                ? 'bg-red-50 text-red-600 border-red-100'
+                                : 'bg-blue-50 text-blue-600 border-blue-100'
+                            }`}>
+                              {file.type?.includes('pdf') ? 'PDF' : 'IMG'}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="truncate text-sm font-medium text-foreground pr-2">{file.name}</span>
+                              <span className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</span>
+                            </div>
+                          </div>
+                          
+                          {/* BOTÃO EXCLUIR (Texto) */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors font-medium"
+                            onClick={() => {
+                              setBudget(prev => prev.filter((_, i) => i !== index));
+                              setBudgetPendingFiles(prev => prev.filter((_, i) => i !== index));
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <>
-                      <input
-                        ref={fuelEntryInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => e.target.files?.[0] && uploadFuel('entry', e.target.files[0])}
-                        hidden
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="w-full h-40 border-2 border-dashed flex flex-col gap-2"
-                        onClick={() => fuelEntryInputRef.current?.click()}
-                        disabled={isLocked}
-                      >
-                        <span className="text-2xl">📷</span><span>Anexar Entrada</span>
-                      </Button>
-                    </>
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <div className="text-xs uppercase text-muted-foreground font-bold">Saída</div>
-                  {fuelExitUrl ? (
-                    <div className="relative group w-full h-40">
-                      <img
-                        src={fuelExitUrl}
-                        className="w-full h-full object-cover rounded-md border border-border cursor-pointer hover:opacity-90"
-                        onClick={() => setPreviewUrl(fuelExitUrl!)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeFuel('exit')}
-                        className="absolute top-2 right-2 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                        disabled={isLocked}
-                      >
-                        ✕
-                      </button>
+                <div className="mt-6 border border-border rounded-lg p-4">
+                  <h3 className="text-sm font-semibold mb-3">Registro de Combustível</h3>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium">ENTRADA</div>
+                        {fuelEntryUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFuelEntry(null)}
+                            className="text-red-600 hover:bg-red-600 hover:text-white"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </Button>
+                        )}
+                      </div>
+                      {fuelEntryUrl ? (
+                        <img src={fuelEntryUrl} className="w-full h-48 object-cover rounded-md border" />
+                      ) : (
+                        <>
+                          <input
+                            id="fuel-entry"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => onPickFuel('entry', e)}
+                          />
+                          <label
+                            htmlFor="fuel-entry"
+                            className="cursor-pointer border-2 border-dashed border-muted-foreground/25 rounded-lg h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
+                          >
+                            <Camera className="w-5 h-5" />
+                            <span className="font-medium">Anexar Entrada</span>
+                          </label>
+                        </>
+                      )}
                     </div>
-                  ) : (
-                    <>
-                      <input
-                        ref={fuelExitInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => e.target.files?.[0] && uploadFuel('exit', e.target.files[0])}
-                        hidden
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="w-full h-40 border-2 border-dashed flex flex-col gap-2"
-                        onClick={() => fuelExitInputRef.current?.click()}
-                        disabled={isLocked}
-                      >
-                        <span className="text-2xl">📷</span><span>Anexar Saída</span>
-                      </Button>
-                    </>
-                  )}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium">SAÍDA</div>
+                        {fuelExitUrl && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFuelExit(null)}
+                            className="text-red-600 hover:bg-red-600 hover:text-white"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </Button>
+                        )}
+                      </div>
+                      {fuelExitUrl ? (
+                        <img src={fuelExitUrl} className="w-full h-48 object-cover rounded-md border" />
+                      ) : (
+                        <>
+                          <input
+                            id="fuel-exit"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => onPickFuel('exit', e)}
+                          />
+                          <label
+                            htmlFor="fuel-exit"
+                            className="cursor-pointer border-2 border-dashed border-muted-foreground/25 rounded-lg h-48 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground"
+                          >
+                            <Camera className="w-5 h-5" />
+                            <span className="font-medium">Anexar Saída</span>
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="flex justify-between mb-16 md:mb-0">
-              <Button variant="ghost" onClick={() => setStep(3)}>Voltar</Button>
-              <Button onClick={saveAndExit} loading={finalizing} disabled={finalizing || isLocked}>Salvar e Sair</Button>
-            </div>
-          </div>
+
+              </div> 
+            </div> 
+
+            {/* Footer de Ações (Únicos botões de salvar) */} 
+            <div className="flex flex-col-reverse sm:flex-row justify-between gap-4 mt-8 pt-4 border-t"> 
+              <Button variant="ghost" onClick={() => setStep(3)}>Voltar</Button> 
+              <div className="flex gap-2 w-full sm:w-auto"> 
+                <Button variant="secondary" onClick={() => saveDraft()} className="flex-1 sm:flex-none"> 
+                  <Save className="w-4 h-4 mr-2"/>Rascunho 
+                </Button> 
+                <Button onClick={saveAndExit} disabled={finalizing || isLocked} className="bg-emerald-600 hover:bg-emerald-700 text-white flex-1 sm:flex-none"> 
+                    {finalizing ? 'Salvando...' : <><CheckCircle2 className="w-4 h-4 mr-2"/>Finalizar</>} 
+                </Button> 
+              </div> 
+            </div> 
+          </div> 
         )}
       </Card>
       <SimpleModal open={!!previewUrl} onClose={() => setPreviewUrl(null)} title="Visualização">
