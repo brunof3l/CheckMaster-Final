@@ -9,16 +9,45 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listUsers, setUserRole, disableUser, resetPassword, type AdminUser } from '@/services/adminUsers'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/store/auth'
+import { supabase } from '@/config/supabase'
 
 export default function UsersAdmin() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(false)
   const me = useAuthStore((s) => s.user)
   const isMe = (u: AdminUser) => me?.id === u.id
   const { data, isLoading } = useQuery({ queryKey: ['admin-users', search], queryFn: () => listUsers(search) })
   const promote = useMutation({ mutationFn: (u: AdminUser) => setUserRole(u.id, 'admin'), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }) })
   const demote = useMutation({ mutationFn: (u: AdminUser) => setUserRole(u.id, 'user'), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }) })
   const disable = useMutation({ mutationFn: (u: AdminUser) => disableUser(u.id), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }) })
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este usuário permanentemente? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase.rpc('delete_user_by_admin', {
+        target_user_id: userId
+      });
+
+      if (error) throw error;
+
+      toast.success('Usuário excluído do banco de dados com sucesso!');
+      
+      qc.invalidateQueries({ queryKey: ['admin-users'] });
+      
+    } catch (error: any) {
+      console.error('Erro ao excluir:', error);
+      toast.error('Erro ao excluir usuário: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const columns: Column<AdminUser>[] = useMemo(
     () => [
@@ -82,16 +111,8 @@ export default function UsersAdmin() {
             </Button>
             <Button
               variant="ghost"
-              onClick={async () => {
-                if (!confirm('Confirma desativar este usuário?')) return
-                try {
-                  await disable.mutateAsync(u)
-                  toast.success('Usuário desativado')
-                } catch (e: any) {
-                  toast.error(e.message ?? 'Falha ao desativar')
-                }
-              }}
-              disabled={isMe(u)}
+              onClick={() => handleDeleteUser(u.id)}
+              disabled={isMe(u) || loading}
             >
               Excluir
             </Button>
