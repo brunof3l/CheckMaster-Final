@@ -7,6 +7,7 @@ import Card from '@/components/ui/Card'
 import { useAuthStore } from '@/store/auth'
 import { toast } from 'sonner'
 import { useNavigate, Link } from 'react-router-dom'
+import { PageTransition } from '@/components/PageTransition'
 
 const schema = z.object({
   email: z.string().email('Email inválido'),
@@ -30,6 +31,7 @@ export default function Login() {
   }
 
   return (
+    <PageTransition>
     <div className="w-full flex items-center justify-center py-24">
       <Card className="w-full max-w-sm p-6">
         <div className="flex justify-center mb-6">
@@ -56,6 +58,7 @@ export default function Login() {
         </div>
       </Card>
     </div>
+    </PageTransition>
   )
 }
 

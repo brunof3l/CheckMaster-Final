@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { AnimatePresence } from 'framer-motion'
 import Login from '@/pages/Auth/Login'
 import Register from '@/pages/Auth/Register'
 import Checklists from '@/pages/Checklists'
@@ -13,9 +14,12 @@ import Configuracoes from '@/pages/Configuracoes'
 import ProtectedRoute from '@/router/ProtectedRoute'
 
 export function AppRoutes() {
+  const location = useLocation()
+
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route
         path="/checklists"
@@ -90,6 +94,7 @@ export function AppRoutes() {
         }
       />
       <Route path="*" element={<Navigate to="/checklists" replace />} />
-    </Routes>
+      </Routes>
+    </AnimatePresence>
   )
 }

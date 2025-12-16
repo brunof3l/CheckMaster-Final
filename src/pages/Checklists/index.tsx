@@ -14,6 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 import { exportChecklistPDF } from '@/services/pdfExport'
 import { FileText, Filter } from 'lucide-react'
 import { toast } from 'sonner'
+import { PageTransition } from '@/components/PageTransition'
 
 const getDaysOpen = (dateString: string) => {
   const start = new Date(dateString)
@@ -142,6 +143,7 @@ export default function Checklists() {
 
 
   return (
+    <PageTransition>
     <div className="space-y-4">
       <HeaderPage
         title="Checklists"
@@ -310,5 +312,6 @@ export default function Checklists() {
         )}
       </div>
     </div>
+    </PageTransition>
   )
 }

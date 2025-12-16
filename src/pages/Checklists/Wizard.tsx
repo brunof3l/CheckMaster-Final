@@ -19,6 +19,7 @@ import SupplierForm from '@/components/forms/SupplierForm'
 import { createSupplierRow } from '@/services/suppliers'
 import { useAuthStore } from '@/store/auth'
 import imageCompression from 'browser-image-compression'
+import { PageTransition } from '@/components/PageTransition'
 
 
 type Step = 1 | 2 | 3 | 4
@@ -653,6 +654,7 @@ export default function ChecklistWizard() {
   }
 
   return (
+    <PageTransition>
     <div className="space-y-4">
       <HeaderPage title="Checklist" />
       <Card className="p-4">
@@ -1024,5 +1026,6 @@ export default function ChecklistWizard() {
         <SupplierForm onCancel={() => setIsNewSupplierOpen(false)} onSave={handleCreateSupplier} />
       </SimpleModal>
     </div>
+    </PageTransition>
   )
 }
