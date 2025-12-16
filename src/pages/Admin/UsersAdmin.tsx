@@ -18,8 +18,6 @@ export default function UsersAdmin() {
   const me = useAuthStore((s) => s.user)
   const isMe = (u: AdminUser) => me?.id === u.id
   const { data, isLoading } = useQuery({ queryKey: ['admin-users', search], queryFn: () => listUsers(search) })
-  const promote = useMutation({ mutationFn: (u: AdminUser) => setUserRole(u.id, 'admin'), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }) })
-  const demote = useMutation({ mutationFn: (u: AdminUser) => setUserRole(u.id, 'user'), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }) })
   const disable = useMutation({ mutationFn: (u: AdminUser) => disableUser(u.id), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }) })
 
   const handleDeleteUser = async (userId: string) => {
@@ -48,6 +46,44 @@ export default function UsersAdmin() {
     }
   };
 
+  const handleToggleAdmin = async (userId: string, currentRole: string) => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    const actionText = newRole === 'admin' ? 'tornar admin' : 'remover admin';
+
+    if (!window.confirm(`Tem certeza que deseja ${actionText} este usuário?`)) return;
+
+    try {
+      const { error } = await supabase.rpc('update_user_role', {
+        target_user_id: userId,
+        new_role: newRole
+      });
+
+      if (error) throw error;
+
+      toast.success(`Usuário agora é ${newRole}!`);
+      
+      qc.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (error: any) {
+      toast.error('Erro ao alterar papel: ' + error.message);
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    if (!window.confirm(`Enviar email de redefinição de senha para ${email}?`)) return;
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/reset-password'
+      });
+
+      if (error) throw error;
+
+      toast.success(`Email de redefinição enviado para ${email}`);
+    } catch (error: any) {
+      toast.error('Erro ao enviar reset: ' + error.message);
+    }
+  };
+
 
   const columns: Column<AdminUser>[] = useMemo(
     () => [
@@ -68,14 +104,7 @@ export default function UsersAdmin() {
           <div className="flex gap-2">
             {u.role === 'user' && (
               <Button
-                onClick={async () => {
-                  try {
-                    await promote.mutateAsync(u)
-                    toast.success('Usuário promovido a admin')
-                  } catch (e: any) {
-                    toast.error(e.message ?? 'Falha ao promover')
-                  }
-                }}
+                onClick={() => handleToggleAdmin(u.id, u.role)}
                 disabled={isMe(u)}
               >
                 Tornar admin
@@ -83,14 +112,7 @@ export default function UsersAdmin() {
             )}
             {u.role === 'admin' && (
               <Button
-                onClick={async () => {
-                  try {
-                    await demote.mutateAsync(u)
-                    toast.success('Permissão admin removida')
-                  } catch (e: any) {
-                    toast.error(e.message ?? 'Falha ao remover')
-                  }
-                }}
+                onClick={() => handleToggleAdmin(u.id, u.role)}
                 disabled={isMe(u)}
               >
                 Remover admin
@@ -98,14 +120,7 @@ export default function UsersAdmin() {
             )}
             <Button
               variant="ghost"
-              onClick={async () => {
-                try {
-                  await resetPassword(u.email, window.location.origin + '/reset-password')
-                  toast.success(`E-mail de redefinição enviado para ${u.email}`)
-                } catch (e: any) {
-                  toast.error(e.message ?? 'Falha ao enviar e-mail de redefinição')
-                }
-              }}
+              onClick={() => handleResetPassword(u.email)}
             >
               Resetar senha
             </Button>
@@ -120,7 +135,7 @@ export default function UsersAdmin() {
         ),
       },
     ],
-    [promote.mutateAsync, demote.mutateAsync, disable.mutateAsync, search]
+    [disable.mutateAsync, search]
   )
 
   return (
