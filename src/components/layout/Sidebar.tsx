@@ -15,7 +15,13 @@ export default function Sidebar({ onClose, className }: { onClose?: () => void; 
   const profile = useAuthStore((s) => s.profile)
   const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
-  const items = profile?.role === 'admin' ? [...baseItems, { to: '/admin', label: 'Admin', icon: Shield }] : baseItems
+  const items = [...baseItems]
+  if (profile?.role === 'admin' || profile?.role === 'gerente') {
+    items.splice(1, 0, { to: '/approvals', label: 'Aprovações', icon: CheckSquare })
+  }
+  if (profile?.role === 'admin') {
+    items.push({ to: '/admin', label: 'Admin', icon: Shield })
+  }
   return (
     <aside className={cn("w-64 bg-muted border-r border-border p-4 flex flex-col h-full", className)}>
       <div className="flex items-center h-24 px-0">

@@ -285,6 +285,43 @@ export default function ChecklistDetail() {
 
           <Card className="p-4">
             <h2 className="font-semibold mb-3">Orçamento</h2>
+            
+            {/* Status do Orçamento */}
+            {(meta?.budget_total || data?.status === 'aguardando_aprovacao' || data?.status === 'em_andamento') && (
+              <div className={`p-4 rounded-lg border mb-4 ${
+                data?.status === 'em_andamento' ? 'bg-green-50 border-green-200' :
+                data?.status === 'aguardando_aprovacao' ? 'bg-yellow-50 border-yellow-200' :
+                'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Status do Orçamento</h3>
+                    <p className="text-2xl font-bold mt-1">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(meta?.budget_total || 0)}
+                    </p>
+                  </div>
+
+                  {data?.status === 'em_andamento' && (
+                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium text-sm border border-green-200 flex items-center gap-2">
+                      ✅ Orçamento Aprovado - Autorizado Execução
+                    </span>
+                  )}
+
+                  {data?.status === 'aguardando_aprovacao' && (
+                    <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full font-medium text-sm border border-yellow-200 flex items-center gap-2">
+                      ⏳ Aguardando Aprovação da Gerência
+                    </span>
+                  )}
+                  
+                  {data?.status === 'rascunho' && (
+                    <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full font-medium text-sm border border-gray-200 flex items-center gap-2">
+                      📝 Rascunho / Devolvido
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {budget.length === 0 ? (
               <p className="text-muted-foreground text-sm">Sem anexos</p>
             ) : (

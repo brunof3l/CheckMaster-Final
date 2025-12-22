@@ -326,7 +326,7 @@ export default function ChecklistWizard() {
     if (!checklistId) {
       const { data, error } = await supabase
         .from('checklists')
-        .insert({ created_by: uid, status: 'em_andamento', vehicle_id: values.vehicle_id, supplier_id: values.supplier_id, notes: values.notes ?? '', items: payloadItems })
+        .insert({ created_by: uid, status: 'rascunho', vehicle_id: values.vehicle_id, supplier_id: values.supplier_id, notes: values.notes ?? '', items: payloadItems })
         .select('id, seq')
         .single()
       if (error) {
@@ -409,41 +409,83 @@ export default function ChecklistWizard() {
     setBudgetPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  async function onPickFuel(kind: 'entry' | 'exit', e: React.ChangeEvent<HTMLInputElement>) {
+  // Helper de compressão
+  const compressImage = async (file: File) => {
+    const options = {
+      maxSizeMB: 0.8,
+      maxWidthOrHeight: 1920,
+      useWebWorker: true
+    };
+    try {
+      return await imageCompression(file, options);
+    } catch (error) {
+      console.error("Erro ao comprimir", error);
+      return file; // Se der erro, retorna o original mesmo
+    }
+  };
+
+  async function handleFuelEntryUpload(e: React.ChangeEvent<HTMLInputElement>) {
     try {
       if (!checklistId) return
       const file = e.target.files?.[0]
       if (!file) return
-      let uploadFile: File = file
-      const isImage = file.type.startsWith('image/')
-      if (isImage) {
-        const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true }
-        try { uploadFile = (await imageCompression(file, options)) as File } catch {}
-      }
-      const ext = isImage
-        ? (uploadFile.type === 'image/png' ? 'png' : uploadFile.type === 'image/webp' ? 'webp' : 'jpg')
-        : (file.name.split('.').pop()?.toLowerCase() || 'bin')
-      const path = `${checklistId}/fuel/${kind}-${crypto.randomUUID()}.${ext}`
-      const { error: upErr } = await supabase.storage.from('checklists').upload(path, uploadFile, { upsert: false })
+
+      const compressedFile = await compressImage(file)
+      
+      const ext = compressedFile.type === 'image/png' ? 'png' : compressedFile.type === 'image/webp' ? 'webp' : 'jpg'
+      const path = `${checklistId}/fuel/entry-${crypto.randomUUID()}.${ext}`
+      
+      const { error: upErr } = await supabase.storage.from('checklists').upload(path, compressedFile, { upsert: false })
       if (upErr) throw new Error(upErr.message)
-  
-      const next = {
-        entry: kind === 'entry' ? { path, created_at: new Date().toISOString() } : fuelEntry,
-        exit: kind === 'exit' ? { path, created_at: new Date().toISOString() } : fuelExit,
+
+      const nextEntry = { path, created_at: new Date().toISOString() }
+      const nextPhotos = {
+        entry: nextEntry,
+        exit: fuelExit, // mantém o que já estava
       }
-      const { error } = await supabase.from('checklists').update({ fuelGaugePhotos: next }).eq('id', checklistId)
+
+      const { error } = await supabase.from('checklists').update({ fuelGaugePhotos: nextPhotos }).eq('id', checklistId)
       if (error) throw error
-  
-      if (kind === 'entry') {
-        setFuelEntry(next.entry as any)
-        const { data: u } = await supabase.storage.from('checklists').createSignedUrl(path, 3600)
-        if (u) setFuelEntryUrl(u.signedUrl)
-      } else {
-        setFuelExit(next.exit as any)
-        const { data: u } = await supabase.storage.from('checklists').createSignedUrl(path, 3600)
-        if (u) setFuelExitUrl(u.signedUrl)
+
+      setFuelEntry(nextEntry)
+      const { data: u } = await supabase.storage.from('checklists').createSignedUrl(path, 3600)
+      if (u) setFuelEntryUrl(u.signedUrl)
+
+      toast.success('Foto de Entrada anexada')
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'Erro ao anexar combustível')
+    }
+  }
+
+  async function handleFuelExitUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    try {
+      if (!checklistId) return
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      const compressedFile = await compressImage(file)
+      
+      const ext = compressedFile.type === 'image/png' ? 'png' : compressedFile.type === 'image/webp' ? 'webp' : 'jpg'
+      const path = `${checklistId}/fuel/exit-${crypto.randomUUID()}.${ext}`
+      
+      const { error: upErr } = await supabase.storage.from('checklists').upload(path, compressedFile, { upsert: false })
+      if (upErr) throw new Error(upErr.message)
+
+      const nextExit = { path, created_at: new Date().toISOString() }
+      const nextPhotos = {
+        entry: fuelEntry, // mantém o que já estava
+        exit: nextExit,
       }
-      toast.success('Foto de combustível anexada')
+
+      const { error } = await supabase.from('checklists').update({ fuelGaugePhotos: nextPhotos }).eq('id', checklistId)
+      if (error) throw error
+
+      setFuelExit(nextExit)
+      const { data: u } = await supabase.storage.from('checklists').createSignedUrl(path, 3600)
+      if (u) setFuelExitUrl(u.signedUrl)
+
+      toast.success('Foto de Saída anexada')
     } catch (err: any) {
       console.error(err)
       toast.error(err.message || 'Erro ao anexar combustível')
@@ -600,22 +642,34 @@ export default function ChecklistWizard() {
           km: formValues.km ? Number(formValues.km) : (existingItems?.meta?.km ?? currentItems?.meta?.km),
           service: formValues.service || (existingItems?.meta?.service ?? currentItems?.meta?.service),
           responsavel: formValues.responsavel || (existingItems?.meta?.responsavel ?? currentItems?.meta?.responsavel),
+          budget_total: currentItems?.meta?.budget_total ?? existingItems?.meta?.budget_total,
         },
       }
+
+      // Fetch fresh profile to be sure about role
+      let currentRole = profile?.role
+      if (user?.id) {
+        const { data: userProfile } = await supabase.from('users').select('role').eq('id', user.id).single()
+        if (userProfile) currentRole = userProfile.role
+      }
+
+      // Define status based on user role
+      const canApprove = currentRole === 'admin' || currentRole === 'gerente'
+      const status = canApprove ? 'em_andamento' : 'aguardando_aprovacao'
 
       const { error } = await supabase
         .from('checklists')
         .update({
           items: mergedItems,
           budgetAttachments: uploadedBudget,
-          status: 'em_andamento',
+          status: status,
           is_locked: false,
         })
         .eq('id', checklistId)
 
       if (error) throw error
 
-      toast.success('Checklist salvo e colocado em andamento!')
+      toast.success(status === 'em_andamento' ? 'Checklist salvo e colocado em andamento!' : 'Checklist enviado para aprovação!')
       navigate('/checklists')
     } catch (error: any) {
       console.error('Erro ao finalizar:', error)
@@ -845,6 +899,27 @@ export default function ChecklistWizard() {
               </div>
 
               <div className="p-6 space-y-6">
+                {/* Campo Valor Total do Orçamento */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Valor Total do Orçamento
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-gray-500">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0,00"
+                      className="pl-8 w-full border rounded-md p-2"
+                      value={items.meta?.budget_total || ''}
+                      onChange={(e) => setItems(prev => ({
+                        ...prev,
+                        meta: { ...prev.meta, budget_total: parseFloat(e.target.value) }
+                      }))}
+                    />
+                  </div>
+                </div>
+
                 {/* Área de Upload */}
                 <div className="border-2 border-dashed border-muted-foreground/20 bg-muted/5 rounded-xl p-6 text-center">
                   <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
@@ -949,7 +1024,7 @@ export default function ChecklistWizard() {
                             type="file"
                             accept="image/*"
                             className="hidden"
-                            onChange={(e) => onPickFuel('entry', e)}
+                            onChange={handleFuelEntryUpload}
                           />
                           <label
                             htmlFor="fuel-entry"
@@ -985,7 +1060,7 @@ export default function ChecklistWizard() {
                             type="file"
                             accept="image/*"
                             className="hidden"
-                            onChange={(e) => onPickFuel('exit', e)}
+                            onChange={handleFuelExitUpload}
                           />
                           <label
                             htmlFor="fuel-exit"

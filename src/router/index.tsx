@@ -6,6 +6,7 @@ import Checklists from '@/pages/Checklists'
 import ChecklistDetail from '@/pages/Checklists/Detail'
 import ChecklistWizard from '@/pages/Checklists/Wizard'
 import ChecklistNew from '@/pages/Checklists/New'
+import Approvals from '@/pages/Approvals'
 import Veiculos from '@/pages/Veiculos'
 import Fornecedores from '@/pages/Fornecedores'
 import Admin from '@/pages/Admin'
@@ -50,6 +51,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <ChecklistWizard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approvals"
+        element={
+          <ProtectedRoute>
+            <Approvals />
           </ProtectedRoute>
         }
       />

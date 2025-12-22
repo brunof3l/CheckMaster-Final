@@ -46,11 +46,8 @@ export default function UsersAdmin() {
     }
   };
 
-  const handleToggleAdmin = async (userId: string, currentRole: string) => {
-    const newRole = currentRole === 'admin' ? 'user' : 'admin';
-    const actionText = newRole === 'admin' ? 'tornar admin' : 'remover admin';
-
-    if (!window.confirm(`Tem certeza que deseja ${actionText} este usuário?`)) return;
+  const handleChangeRole = async (userId: string, newRole: string) => {
+    if (!window.confirm(`Tem certeza que deseja alterar o papel deste usuário para ${newRole}?`)) return;
 
     try {
       const { error } = await supabase.rpc('update_user_role', {
@@ -60,7 +57,7 @@ export default function UsersAdmin() {
 
       if (error) throw error;
 
-      toast.success(`Usuário agora é ${newRole}!`);
+      toast.success(`Papel atualizado para ${newRole}!`);
       
       qc.invalidateQueries({ queryKey: ['admin-users'] });
     } catch (error: any) {
@@ -93,7 +90,9 @@ export default function UsersAdmin() {
         key: 'role',
         header: 'Papel',
         render: (u) => (
-          <Badge variant={u.role === 'admin' ? 'success' : u.role === 'user' ? 'default' : 'destructive'}>{u.role === 'disabled' ? 'desativado' : u.role}</Badge>
+          <Badge variant={u.role === 'admin' ? 'success' : u.role === 'gerente' ? 'warning' : u.role === 'user' ? 'default' : 'destructive'}>
+            {u.role === 'disabled' ? 'desativado' : u.role}
+          </Badge>
         ),
       },
       { key: 'created_at', header: 'Criado em', render: (u) => new Date(u.created_at).toLocaleString('pt-BR') },
@@ -101,31 +100,46 @@ export default function UsersAdmin() {
         key: 'actions',
         header: 'Ações',
         render: (u) => (
-          <div className="flex gap-2">
-            {u.role === 'user' && (
+          <div className="flex gap-2 flex-wrap">
+            {u.role !== 'admin' && (
               <Button
-                onClick={() => handleToggleAdmin(u.id, u.role)}
+                size="sm"
+                onClick={() => handleChangeRole(u.id, 'admin')}
                 disabled={isMe(u)}
               >
-                Tornar admin
+                Tornar Admin
               </Button>
             )}
-            {u.role === 'admin' && (
+            {u.role !== 'gerente' && (
               <Button
-                onClick={() => handleToggleAdmin(u.id, u.role)}
+                size="sm"
+                variant="secondary"
+                onClick={() => handleChangeRole(u.id, 'gerente')}
                 disabled={isMe(u)}
               >
-                Remover admin
+                Tornar Gerente
+              </Button>
+            )}
+            {(u.role === 'admin' || u.role === 'gerente') && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleChangeRole(u.id, 'user')}
+                disabled={isMe(u)}
+              >
+                Remover Privilégios
               </Button>
             )}
             <Button
               variant="ghost"
+              size="sm"
               onClick={() => handleResetPassword(u.email)}
             >
               Resetar senha
             </Button>
             <Button
               variant="ghost"
+              size="sm"
               onClick={() => handleDeleteUser(u.id)}
               disabled={isMe(u) || loading}
             >

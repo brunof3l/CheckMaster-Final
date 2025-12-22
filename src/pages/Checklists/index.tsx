@@ -25,75 +25,102 @@ const getDaysOpen = (dateString: string) => {
 
 type ChecklistRow = Checklist
 
-const columns: Column<ChecklistRow>[] = [
-  { key: 'seq', header: 'Número' },
-  { key: 'vehicles.plate', header: 'Placa', render: (r) => r.vehicles?.plate ?? '-' },
-  { key: 'suppliers.display_name', header: 'Fornecedor', render: (r) => r.suppliers?.trade_name ?? r.suppliers?.corporate_name ?? '-' },
-  {
-    key: 'status',
-    header: 'Status',
-    render: (r) => {
-      const label = r.status
-      const variant = label === 'finalizado' ? 'success' : label === 'cancelado' ? 'destructive' : label === 'rascunho' ? 'draft' : 'warning'
-      return (
-        <div className="flex items-center gap-2">
-          <Badge variant={variant}>{label.replace('_', ' ')}</Badge>
-          {label !== 'finalizado' && (() => {
-            const d = getDaysOpen(r.created_at)
-            const text = d <= 0 ? 'Hoje' : d >= 2 ? `${d} dias atrasado` : `${d} dia${d > 1 ? 's' : ''}`
-            const variantDelayed = d >= 2 ? 'destructive' : 'default'
-            return <Badge variant={variantDelayed}>{text}</Badge>
-          })()}
-        </div>
-      )
-    },
-  },
-  { key: 'created_at', header: 'Criado em', render: (r) => new Date(r.created_at).toLocaleString('pt-BR') },
-  {
-    key: 'dias_em_aberto',
-    header: 'Dias em Aberto',
-    render: (r) => {
-      const label = r.status
-      if (label === 'finalizado') {
-        return <span className="text-muted-foreground">-</span>
-      }
-      const d = getDaysOpen(r.created_at)
-      return (
-        <div className="flex items-center gap-2">
-          <span className={d >= 2 ? 'font-bold text-red-500' : ''}>{d}</span>
-          <span className="text-xs text-muted-foreground">dias</span>
-        </div>
-      )
-    },
-  },
-  {
-    key: 'actions',
-    header: 'Ações',
-    render: (r) => (
-      <div className="flex items-center gap-3">
-        <Link to={r.status === 'rascunho' ? `/checklists/${r.id}/edit` : `/checklists/${r.id}`} className="text-primary hover:underline">
-          Abrir
-        </Link>
-        <button
-          className="text-primary hover:underline inline-flex items-center gap-1"
-          onClick={async () => {
-            const t = toast.loading('Gerando PDF...')
-            try {
-              await exportChecklistPDF(r.id)
-              toast.success('PDF gerado', { id: t })
-            } catch (e: any) {
-              toast.error(e?.message ?? 'Falha ao gerar PDF', { id: t })
-            }
-          }}
-        >
-          <FileText size={16} /> Exportar
-        </button>
-      </div>
-    ),
-  },
-]
+
+import { useAuthStore } from '@/store/auth'
 
 export default function Checklists() {
+  const { profile } = useAuthStore()
+  
+  const columns: Column<ChecklistRow>[] = useMemo(() => [
+    { key: 'seq', header: 'Número' },
+    { key: 'vehicles.plate', header: 'Placa', render: (r) => r.vehicles?.plate ?? '-' },
+    { key: 'suppliers.display_name', header: 'Fornecedor', render: (r) => r.suppliers?.trade_name ?? r.suppliers?.corporate_name ?? '-' },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (r) => {
+        const label = r.status
+        const variant = label === 'finalizado' ? 'success' : label === 'cancelado' ? 'destructive' : label === 'rascunho' ? 'draft' : 'warning'
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant={variant}>{label.replace('_', ' ')}</Badge>
+            {label !== 'finalizado' && (() => {
+              const d = getDaysOpen(r.created_at)
+              const text = d <= 0 ? 'Hoje' : d >= 2 ? `${d} dias atrasado` : `${d} dia${d > 1 ? 's' : ''}`
+              const variantDelayed = d >= 2 ? 'destructive' : 'default'
+              return <Badge variant={variantDelayed}>{text}</Badge>
+            })()}
+          </div>
+        )
+      },
+    },
+    { key: 'created_at', header: 'Criado em', render: (r) => new Date(r.created_at).toLocaleString('pt-BR') },
+    {
+      key: 'dias_em_aberto',
+      header: 'Dias em Aberto',
+      render: (r) => {
+        const label = r.status
+        if (label === 'finalizado') {
+          return <span className="text-muted-foreground">-</span>
+        }
+        const d = getDaysOpen(r.created_at)
+        return (
+          <div className="flex items-center gap-2">
+            <span className={d >= 2 ? 'font-bold text-red-500' : ''}>{d}</span>
+            <span className="text-xs text-muted-foreground">dias</span>
+          </div>
+        )
+      },
+    },
+    {
+      key: 'actions',
+      header: 'Ações',
+      render: (r) => {
+        const isWaiting = r.status === 'aguardando_aprovacao'
+        const isManagerOrAdmin = ['admin', 'gerente'].includes(profile?.role || '')
+        const isLocked = isWaiting && !isManagerOrAdmin
+
+        return (
+          <div className="flex items-center gap-3">
+            {isLocked ? (
+              <span 
+                className="text-primary/50 cursor-not-allowed opacity-50"
+                title="Aguardando aprovação da gerência"
+              >
+                Abrir
+              </span>
+            ) : (
+              <Link 
+                to={r.status === 'rascunho' ? `/checklists/${r.id}/edit` : `/checklists/${r.id}`} 
+                className="text-primary hover:underline"
+              >
+                Abrir
+              </Link>
+            )}
+            
+            <button
+              className={`text-primary hover:underline inline-flex items-center gap-1 ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={isLocked}
+              title={isLocked ? "Aguardando aprovação da gerência" : "Exportar PDF"}
+              onClick={async () => {
+                if (isLocked) return
+                const t = toast.loading('Gerando PDF...')
+                try {
+                  await exportChecklistPDF(r.id)
+                  toast.success('PDF gerado', { id: t })
+                } catch (e: any) {
+                  toast.error(e?.message ?? 'Falha ao gerar PDF', { id: t })
+                }
+              }}
+            >
+              <FileText size={16} /> Exportar
+            </button>
+          </div>
+        )
+      },
+    },
+  ], [profile])
+
   const [placa, setPlaca] = useState('')
   const [fornecedor, setFornecedor] = useState('')
   const [status, setStatus] = useState('')
@@ -274,21 +301,40 @@ export default function Checklists() {
                   <div className="text-muted-foreground">{r.suppliers?.trade_name ?? r.suppliers?.corporate_name ?? '-'}</div>
                 </div>
                 <div className="mt-3 flex items-center gap-3">
-                  <Link to={r.status === 'rascunho' ? `/checklists/${r.id}/edit` : `/checklists/${r.id}`} className="text-primary hover:underline">Abrir</Link>
-                  <button
-                    className="text-primary hover:underline inline-flex items-center gap-1"
-                    onClick={async () => {
-                      const t = toast.loading('Gerando PDF...')
-                      try {
-                        await exportChecklistPDF(r.id)
-                        toast.success('PDF gerado', { id: t })
-                      } catch (e: any) {
-                        toast.error(e?.message ?? 'Falha ao gerar PDF', { id: t })
-                      }
-                    }}
-                  >
-                    <FileText size={16} /> Exportar
-                  </button>
+                  {(() => {
+                    const isWaiting = r.status === 'aguardando_aprovacao'
+                    const isManagerOrAdmin = ['admin', 'gerente'].includes(profile?.role || '')
+                    const isLocked = isWaiting && !isManagerOrAdmin
+
+                    return (
+                      <>
+                        {isLocked ? (
+                          <span className="text-primary/50 cursor-not-allowed opacity-50" title="Aguardando aprovação da gerência">
+                            Abrir
+                          </span>
+                        ) : (
+                          <Link to={r.status === 'rascunho' ? `/checklists/${r.id}/edit` : `/checklists/${r.id}`} className="text-primary hover:underline">Abrir</Link>
+                        )}
+                        <button
+                          className={`text-primary hover:underline inline-flex items-center gap-1 ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          disabled={isLocked}
+                          title={isLocked ? "Aguardando aprovação da gerência" : "Exportar PDF"}
+                          onClick={async () => {
+                            if (isLocked) return
+                            const t = toast.loading('Gerando PDF...')
+                            try {
+                              await exportChecklistPDF(r.id)
+                              toast.success('PDF gerado', { id: t })
+                            } catch (e: any) {
+                              toast.error(e?.message ?? 'Falha ao gerar PDF', { id: t })
+                            }
+                          }}
+                        >
+                          <FileText size={16} /> Exportar
+                        </button>
+                      </>
+                    )
+                  })()}
                 </div>
               </Card>
             ))}

@@ -1,6 +1,6 @@
 import { supabase } from '@/config/supabase'
 
-export type AdminUser = { id: string; name: string | null; email: string; role: 'admin' | 'user' | 'disabled'; created_at: string }
+export type AdminUser = { id: string; name: string | null; email: string; role: 'admin' | 'user' | 'gerente' | 'disabled'; created_at: string }
 
 export async function listUsers(search?: string): Promise<AdminUser[]> {
   let q = supabase.from('users').select('*').order('created_at', { ascending: false })

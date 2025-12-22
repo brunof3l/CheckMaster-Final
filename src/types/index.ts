@@ -1,10 +1,10 @@
-export type ChecklistStatus = 'em_andamento' | 'finalizado' | 'cancelado' | 'rascunho'
+export type ChecklistStatus = 'em_andamento' | 'finalizado' | 'cancelado' | 'rascunho' | 'aguardando_aprovacao'
 
 export type User = {
   id: string
   name: string | null
   email: string
-  role: 'admin' | 'user'
+  role: 'admin' | 'user' | 'gerente'
 }
 
 export type Vehicle = {
