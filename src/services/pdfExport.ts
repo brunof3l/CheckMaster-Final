@@ -27,7 +27,7 @@ export async function exportChecklistPDF(checklistId: string): Promise<void> {
   let y = 20
 
   doc.setFontSize(16)
-  doc.text('Relatório de Checklist', margin, y)
+  doc.text('Plano de Manutenção', margin, y)
   y += 8
   doc.setFontSize(10)
   const seq = (checklist as any)?.seq ?? null
